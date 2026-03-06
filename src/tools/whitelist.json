@@ -1,0 +1,4 @@
+{
+  "allowed_commands": ["ls", "cd", "cp", "pwd", "dir"],
+  "allowed_scripts": ["skill_calendar.py", "skill_weather.py", "my_bot_logic.py"]
+}
