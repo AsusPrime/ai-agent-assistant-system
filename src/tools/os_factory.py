@@ -1,6 +1,6 @@
 import platform
 
-from src.tools.os_handlers import WindowsHandler, PosixHandler
+from tools.os_handlers import WindowsHandler, PosixHandler
 
 
 def get_os_handler():

@@ -1,22 +1,22 @@
+import os
 import subprocess
-import json
 
-def run_terminal_command(command: str, args: list):
-    with open('tools/whitelist.json', 'r') as f:
-        whitelist = json.load(f)
+from tools.os_factory import get_os_handler
 
-    if command not in whitelist['allowed_commands']:
-        return f"Exception: Command '{command}' not allowed!"
+_SKILLS_DIR = os.path.join(os.path.dirname(__file__), "..", "skills")
 
-    result = subprocess.run([command] + args, capture_output=True, text=True)
-    return result.stdout
 
-def run_python_skill(skill_name: str, params: list):
-    with open('tools/whitelist.json', 'r') as f:
-        whitelist = json.load(f)
+def open_app(name: str, **params):
+    return get_os_handler().open_application(name)
 
-    if skill_name not in whitelist['allowed_scripts']:
-        return f"Exception: Skill '{skill_name}' not found!"
 
-    result = subprocess.run(["python3", f"skills/{skill_name}"] + params, capture_output=True, text=True)
+def run_command(name: str, args: list = [], **params):
+    return get_os_handler().run_shell(f"{name} {' '.join(args)}")
+
+
+def run_skill(name: str, args: list = [], **params):
+    skill_path = os.path.join(_SKILLS_DIR, name)
+    result = subprocess.run(
+        ["python3", skill_path] + args, capture_output=True, text=True
+    )
     return result.stdout
