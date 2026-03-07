@@ -6,7 +6,10 @@ from typing import Dict, Any
 from core.enums import ActionTypeEnum
 
 _WHITELIST_PATH = os.path.join(
-    os.path.dirname(__file__), "..", "tools", "whitelist.json"
+    os.path.dirname(__file__),
+    "..",
+    "tools",
+    "whitelist.json",  # TODO: не подобається те що воно від цього відносного шляху, треба якось зробити щоб у проекта коренева папка була там де CLAUDE.md
 )
 
 
@@ -17,6 +20,8 @@ class Task(BaseModel):
 
     @model_validator(mode="after")
     def check_allowed(self) -> "Task":
+        if self.action == ActionTypeEnum.CHAT:
+            return self
         with open(_WHITELIST_PATH) as f:
             wl = json.load(f)
         mapping = {

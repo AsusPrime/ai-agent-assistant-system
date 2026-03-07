@@ -24,7 +24,7 @@ pip install -r requirements.txt
 ## Architecture
 
 **Framework:** PydanticAI + Pydantic v2 (strict typing, type-safe AI responses).
-**Primary LLM:** Google Gemini (via `google-genai`). Ollama — for local dev/testing.
+**Primary LLM:** Google Gemini via `pydantic_ai.models.google.GoogleModel` + `GoogleProvider`. Ollama — for local dev/testing.
 **State management:** Redis (planned).
 **Memory:** ChromaDB/FAISS + SQLite (planned).
 
@@ -38,19 +38,28 @@ User Input
                     └─> Validator Agent — verifies output
 ```
 
-### Execution Layer (current focus)
+### Brain Layer (Week 2 — implemented)
+
+Data flow: `user input` → `planner_agent` → `Task` → HITL confirm → `Executor`
+
+- `src/config.py` — `Settings` (pydantic-settings); reads `.env` via `find_dotenv`. Fields: `LLM_PROVIDER`, `API_KEY`, `MODEL_NAME`.
+- `src/infrastructure/llm_client.py` — `get_model()` factory; returns `GoogleModel` or `OpenAIChatModel`.
+- `src/core/planner.py` — `planner_agent = Agent(model, output_type=Task, system_prompt=...)`. System prompt dynamically injects whitelist contents.
+- `src/main.py` — REPL loop with HITL: LLM → dry-run print → confirm `y/N` → execute.
+
+### Execution Layer (Week 1 — implemented)
 
 Data flow: `Task (Pydantic model)` → `Executor` → `TOOL_REGISTRY` → `OSHandler`
 
-- `src/core/schemas.py` — `Task` model; validates `action` against `whitelist.json` on construction.
-- `src/core/enums.py` — `ActionTypeEnum` (open_app, run_command, run_skill).
+- `src/core/schemas.py` — `Task` model; validates `action` against `whitelist.json` on construction. `CHAT` action skips whitelist check.
+- `src/core/enums.py` — `ActionTypeEnum` (open_app, run_command, run_skill, chat).
 - `src/core/executor.py` — `Executor.execute(task)` dispatches to registry.
 - `src/core/base_os.py` — `BaseOSHandler` ABC with `open_application` / `run_shell`.
 - `src/tools/registry.py` — `TOOL_REGISTRY` dict mapping action names to callables.
-- `src/tools/handlers.py` — concrete tool functions (`run_terminal_command`, `run_python_skill`).
+- `src/tools/handlers.py` — concrete tool functions (`open_app`, `run_command`, `run_skill`).
 - `src/tools/os_handlers.py` — `WindowsHandler` / `PosixHandler` (Strategy pattern).
 - `src/tools/os_factory.py` — `get_os_handler()` selects handler by `platform.system()`.
-- `src/tools/whitelist.json` — security whitelist: `allowed_commands`, `allowed_scripts`.
+- `src/tools/whitelist.json` — security whitelist: `allowed_apps`, `allowed_commands`, `allowed_scripts`.
 
 ### Dynamic Tool / Skills System
 
@@ -80,4 +89,12 @@ Data flow: `Task (Pydantic model)` → `Executor` → `TOOL_REGISTRY` → `OSHan
 
 ## Import Paths
 
-`main.py` runs from `src/` directory, so imports are relative to `src/` (e.g. `from core.schemas import Task`). Files inside `src/` that import each other use full `src.` prefix (e.g. `from src.core.base_os import BaseOSHandler`). Keep this consistent when adding new modules.
+`main.py` runs from `src/` directory, so all imports are relative to `src/` — no `src.` prefix anywhere (e.g. `from core.schemas import Task`, `from infrastructure.llm_client import get_model`).
+
+## pydantic-ai API (v1.63+)
+
+- `Agent(model, output_type=Task, ...)` — not `result_type`
+- `result.output` — not `result.data`
+- `GoogleModel` from `pydantic_ai.models.google` — API key via `provider=GoogleProvider(api_key=...)`
+- `OpenAIChatModel` from `pydantic_ai.models.openai` — not deprecated `OpenAIModel`
+- `GeminiModel` and `OpenAIModel` are deprecated — do not use

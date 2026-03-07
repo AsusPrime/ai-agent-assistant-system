@@ -1,8 +1,9 @@
 from tools.registry import TOOL_REGISTRY
+from core.schemas import Task
 
 
 class Executor:
-    def execute(self, task):
+    def execute(self, task: Task) -> str:
         func = TOOL_REGISTRY.get(task.action.value)
         if func:
             try:
