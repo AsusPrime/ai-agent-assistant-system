@@ -1,9 +1,24 @@
+import json
 import os
 import subprocess
 
 from core.schemas import Task, TaskResult
 from core.session import SessionState
 from tools.os_factory import get_os_handler
+
+
+def _coerce_args(raw) -> list[str]:
+    if isinstance(raw, list):
+        return [str(a) for a in raw]
+    if isinstance(raw, str):
+        try:
+            parsed = json.loads(raw)
+            if isinstance(parsed, list):
+                return [str(a) for a in parsed]
+        except (json.JSONDecodeError, ValueError):
+            pass
+        return [raw] if raw else []
+    return []
 
 _SKILLS_DIR = os.path.join(os.path.dirname(__file__), "..", "skills")
 
@@ -14,7 +29,7 @@ def open_app(task: Task, session: SessionState) -> TaskResult:
 
 
 def run_command(task: Task, session: SessionState) -> TaskResult:
-    args: list[str] = task.params.get("args", [])
+    args = _coerce_args(task.params.get("args", []))
     name = task.name
 
     if name == "cd":
@@ -34,7 +49,7 @@ def run_command(task: Task, session: SessionState) -> TaskResult:
 
 
 def run_skill(task: Task, session: SessionState) -> TaskResult:
-    args: list[str] = task.params.get("args", [])
+    args = _coerce_args(task.params.get("args", []))
     skill_path = os.path.join(_SKILLS_DIR, task.name)
     result = subprocess.run(
         ["python3", skill_path] + args, capture_output=True, text=True, cwd=session.cwd
