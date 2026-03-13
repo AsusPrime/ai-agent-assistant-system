@@ -33,3 +33,19 @@ class Task(BaseModel):
         if self.name not in allowed:
             raise ValueError(f"'{self.name}' не дозволено для {self.action}")
         return self
+
+
+class TaskResult(BaseModel):
+    task: Task
+    stdout: str = ""
+    stderr: str = ""
+    returncode: int = 0
+
+    @property
+    def success(self) -> bool:
+        return self.returncode == 0
+
+
+class Plan(BaseModel):
+    tasks: list[Task]
+    reasoning: str = ""

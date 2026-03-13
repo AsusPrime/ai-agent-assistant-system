@@ -7,5 +7,5 @@ class BaseOSHandler(ABC):
         pass
 
     @abstractmethod
-    def run_shell(self, command: str) -> str:
-        pass
+    def run_shell(self, command: str, cwd: str | None = None) -> tuple[str, str, int]:
+        """Returns (stdout, stderr, returncode)."""
