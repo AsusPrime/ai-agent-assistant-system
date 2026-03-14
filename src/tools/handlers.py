@@ -33,7 +33,7 @@ def run_command(task: Task, session: SessionState) -> TaskResult:
     name = task.name
 
     if name == "cd":
-        path = args[0] if args else task.params.get("path", "~")
+        path = task.params.get("path") or (args[0] if args else "~")
         new_cwd = os.path.expanduser(str(path))
         if not os.path.isabs(new_cwd):
             new_cwd = os.path.normpath(os.path.join(session.cwd, new_cwd))

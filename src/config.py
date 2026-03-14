@@ -12,6 +12,7 @@ class Settings(BaseSettings):
     LLM_PROVIDER: str = "gemini"
     API_KEY: str = ""
     MODEL_NAME: str = "gemini-2.0-flash"
+    DEBUG: bool = False
 
 
 settings = Settings()

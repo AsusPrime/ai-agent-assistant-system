@@ -22,11 +22,12 @@ class Task(BaseModel):
     def check_allowed(self) -> "Task":
         if self.action == ActionTypeEnum.CHAT:
             return self
+        if self.action == ActionTypeEnum.RUN_COMMAND:
+            return self  # any command allowed; HITL is the safety net
         with open(_WHITELIST_PATH) as f:
             wl = json.load(f)
         mapping = {
             ActionTypeEnum.OPEN_APP: wl["allowed_apps"],
-            ActionTypeEnum.RUN_COMMAND: wl["allowed_commands"],
             ActionTypeEnum.RUN_SKILL: wl["allowed_scripts"],
         }
         allowed = mapping[self.action]
@@ -40,10 +41,18 @@ class TaskResult(BaseModel):
     stdout: str = ""
     stderr: str = ""
     returncode: int = 0
+    skipped: bool = False
+    duration_ms: int = 0
 
     @property
     def success(self) -> bool:
-        return self.returncode == 0
+        return not self.skipped and self.returncode == 0
+
+    @property
+    def status(self) -> str:
+        if self.skipped:
+            return "SKIPPED"
+        return "SUCCESS" if self.returncode == 0 else "FAILED"
 
 
 class Plan(BaseModel):

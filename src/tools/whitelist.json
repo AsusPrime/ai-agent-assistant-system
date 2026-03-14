@@ -1,5 +1,5 @@
 {
   "allowed_apps":     ["discord", "vscode", "notepad", "safari", "chrome"],
-  "allowed_commands": ["ls", "pwd", "dir", "cp", "echo", "cd", "mkdir"],
+  "allowed_commands": ["ls", "pwd", "dir", "cp", "echo", "cd"],
   "allowed_scripts":  ["skill_hello.py", "skill_calendar.py", "skill_weather.py"]
 }

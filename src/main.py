@@ -1,24 +1,58 @@
+import json
+import time
+from pathlib import Path
+
+from config import settings
 from core.enums import ActionTypeEnum
 from core.executor import Executor
 from core.planner import planner_agent
-from core.schemas import Plan, TaskResult
+from core.privacy import PrivacyGuard
+from core.schemas import Plan, Task, TaskResult
 from core.session import SessionState
 
 executor = Executor()
 
+_WHITELIST_PATH = Path(__file__).parent / "tools" / "whitelist.json"
+
+
+def _load_auto_approved() -> set[str]:
+    with open(_WHITELIST_PATH) as f:
+        wl = json.load(f)
+    return set(wl.get("allowed_commands", []))
+
+
+def _requires_confirmation(plan: Plan) -> bool:
+    auto_cmds = _load_auto_approved()
+    for task in plan.tasks:
+        if task.action == ActionTypeEnum.RUN_COMMAND and task.name not in auto_cmds:
+            return True
+    return False
+
 
 def _print_plan(plan: Plan) -> None:
     print(f"[Plan] {len(plan.tasks)} step(s):")
+    auto_cmds = _load_auto_approved()
     for i, task in enumerate(plan.tasks, 1):
-        print(f"  {i}. {task.action.value} | {task.name} | {task.params}")
-    if plan.reasoning:
+        needs_confirm = (
+            task.action == ActionTypeEnum.RUN_COMMAND
+            and task.name not in auto_cmds
+        )
+        marker = " [!]" if needs_confirm else ""
+        print(f"  {i}.{marker} {task.action.value} | {task.name} | {task.params}")
+    if plan.reasoning and settings.DEBUG:
         print(f"  Reasoning: {plan.reasoning}")
 
 
 def _execute_plan(plan: Plan, session: SessionState) -> list[TaskResult]:
     results: list[TaskResult] = []
+    failed = False
     for task in plan.tasks:
+        if failed:
+            results.append(TaskResult(task=task, skipped=True))
+            continue
+        t0 = time.monotonic()
         result = executor.execute(task, session)
+        result.duration_ms = int((time.monotonic() - t0) * 1000)
         results.append(result)
         if result.stdout:
             print(result.stdout, end="" if result.stdout.endswith("\n") else "\n")
@@ -26,15 +60,22 @@ def _execute_plan(plan: Plan, session: SessionState) -> list[TaskResult]:
             print(f"[stderr] {result.stderr}")
         if not result.success:
             print(f"[Error] Step '{task.name}' failed (rc={result.returncode}). Stopping.")
-            break
+            failed = True
+    if settings.DEBUG:
+        _print_execution_log(results)
     return results
+
+
+def _print_execution_log(results: list[TaskResult]) -> None:
+    print("\n[Execution log]")
+    for r in results:
+        print(f"  {r.status:7} | {r.task.action.value:12} | {r.task.name} | {r.duration_ms}ms")
 
 
 def _build_correction_prompt(results: list[TaskResult]) -> str:
     lines = ["The following steps were executed and one failed. Suggest a corrected plan:"]
     for r in results:
-        status = "OK" if r.success else "FAILED"
-        lines.append(f"  [{status}] {r.task.action.value} {r.task.name} → rc={r.returncode}")
+        lines.append(f"  [{r.status}] {r.task.action.value} {r.task.name} → rc={r.returncode}")
         if r.stderr:
             lines.append(f"    stderr: {r.stderr.strip()}")
     return "\n".join(lines)
@@ -42,7 +83,10 @@ def _build_correction_prompt(results: list[TaskResult]) -> str:
 
 def main() -> None:
     session = SessionState()
+    guard = PrivacyGuard()
     print("Assistant is ready. Type your request (Ctrl+C to exit).")
+    if settings.DEBUG:
+        print("[DEBUG mode ON]")
 
     while True:
         try:
@@ -54,8 +98,12 @@ def main() -> None:
         if not user_input:
             continue
 
+        masked_input, pii_map = guard.mask(user_input)
+        if pii_map:
+            print(f"[Privacy] Masked {len(pii_map)} sensitive pattern(s) before sending to LLM.")
+
         try:
-            result = planner_agent.run_sync(user_input, message_history=session.message_history)
+            result = planner_agent.run_sync(masked_input, message_history=session.message_history)
         except Exception as e:
             print(f"[LLM Error] {e}")
             continue
@@ -69,21 +117,22 @@ def main() -> None:
             continue
 
         _print_plan(plan)
-        try:
-            confirm = input("Execute plan? [y/N]: ").strip().lower()
-        except (KeyboardInterrupt, EOFError):
-            print("\nBye.")
-            break
 
-        if confirm != "y":
-            print("Cancelled.")
-            continue
+        if _requires_confirmation(plan):
+            try:
+                confirm = input("Plan contains non-approved command(s) [!]. Execute? [y/N]: ").strip().lower()
+            except (KeyboardInterrupt, EOFError):
+                print("\nBye.")
+                break
+            if confirm != "y":
+                print("Cancelled.")
+                continue
 
         task_results = _execute_plan(plan, session)
 
         # Check if any step failed → correction cycle
-        failed = [r for r in task_results if not r.success]
-        if not failed:
+        failed_steps = [r for r in task_results if not r.success and not r.skipped]
+        if not failed_steps:
             continue
 
         correction_prompt = _build_correction_prompt(task_results)
@@ -104,16 +153,27 @@ def main() -> None:
             continue
 
         _print_plan(correction_plan)
-        try:
-            confirm = input("Execute corrected plan? [y/N]: ").strip().lower()
-        except (KeyboardInterrupt, EOFError):
-            print("\nBye.")
-            break
 
-        if confirm == "y":
-            _execute_plan(correction_plan, session)
+        if _requires_confirmation(correction_plan):
+            try:
+                confirm = input("Corrected plan has non-approved command(s) [!]. Execute? [y/N]: ").strip().lower()
+            except (KeyboardInterrupt, EOFError):
+                print("\nBye.")
+                break
+            if confirm != "y":
+                print("Cancelled.")
+                continue
         else:
-            print("Cancelled.")
+            try:
+                confirm = input("Execute corrected plan? [y/N]: ").strip().lower()
+            except (KeyboardInterrupt, EOFError):
+                print("\nBye.")
+                break
+            if confirm != "y":
+                print("Cancelled.")
+                continue
+
+        _execute_plan(correction_plan, session)
 
 
 if __name__ == "__main__":
