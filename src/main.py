@@ -9,8 +9,10 @@ from core.planner import planner_agent
 from core.privacy import PrivacyGuard
 from core.schemas import Plan, Task, TaskResult
 from core.session import SessionState
+from core.summarizer import summary_agent
 
 executor = Executor()
+MAX_RETRIES = 3
 
 _WHITELIST_PATH = Path(__file__).parent / "tools" / "whitelist.json"
 
@@ -76,9 +78,30 @@ def _build_correction_prompt(results: list[TaskResult]) -> str:
     lines = ["The following steps were executed and one failed. Suggest a corrected plan:"]
     for r in results:
         lines.append(f"  [{r.status}] {r.task.action.value} {r.task.name} → rc={r.returncode}")
-        if r.stderr:
-            lines.append(f"    stderr: {r.stderr.strip()}")
+        if r.stdout.strip():
+            lines.append(f"    stdout: {r.stdout.strip()[:200]!r}")
+        if r.stderr.strip():
+            lines.append(f"    stderr: {r.stderr.strip()[:200]!r}")
     return "\n".join(lines)
+
+
+def _summarize(user_input: str, results: list[TaskResult], retries_exhausted: bool = False) -> None:
+    lines = [f'User asked: "{user_input}"', "Execution results:"]
+    for r in results:
+        lines.append(
+            f"  [{r.status}] {r.task.name} → "
+            f"stdout: {r.stdout.strip()[:100]!r}, stderr: {r.stderr.strip()[:100]!r}"
+        )
+    if retries_exhausted:
+        lines.append("\nAll retry attempts failed. Inform the user clearly.")
+    lines.append("\nProvide a short, friendly summary in the same language the user used.")
+
+    try:
+        summary = summary_agent.run_sync("\n".join(lines))
+        print(f"Assistant: {summary.output}")
+    except Exception as e:
+        if settings.DEBUG:
+            print(f"[Summary Error] {e}")
 
 
 def main() -> None:
@@ -129,51 +152,56 @@ def main() -> None:
                 continue
 
         task_results = _execute_plan(plan, session)
+        retries_exhausted = False
 
-        # Check if any step failed → correction cycle
-        failed_steps = [r for r in task_results if not r.success and not r.skipped]
-        if not failed_steps:
-            continue
+        for attempt in range(1, MAX_RETRIES + 1):
+            failed_steps = [r for r in task_results if not r.success and not r.skipped]
+            if not failed_steps:
+                break
 
-        correction_prompt = _build_correction_prompt(task_results)
-        print("[Correction] Asking LLM for a corrected plan...")
-        try:
-            correction_result = planner_agent.run_sync(
-                correction_prompt, message_history=session.message_history
-            )
-        except Exception as e:
-            print(f"[LLM Error] {e}")
-            continue
+            print(f"[Correction] Attempt {attempt}/{MAX_RETRIES} — asking LLM for a corrected plan...")
+            correction_prompt = _build_correction_prompt(task_results)
 
-        session.message_history = correction_result.all_messages()
-        correction_plan: Plan = correction_result.output
-
-        if len(correction_plan.tasks) == 1 and correction_plan.tasks[0].action == ActionTypeEnum.CHAT:
-            print(f"Assistant: {correction_plan.tasks[0].name}")
-            continue
-
-        _print_plan(correction_plan)
-
-        if _requires_confirmation(correction_plan):
             try:
-                confirm = input("Corrected plan has non-approved command(s) [!]. Execute? [y/N]: ").strip().lower()
+                correction_result = planner_agent.run_sync(
+                    correction_prompt, message_history=session.message_history
+                )
+            except Exception as e:
+                print(f"[LLM Error] {e}")
+                break
+
+            session.message_history = correction_result.all_messages()
+            correction_plan: Plan = correction_result.output
+
+            if len(correction_plan.tasks) == 1 and correction_plan.tasks[0].action == ActionTypeEnum.CHAT:
+                print(f"Assistant: {correction_plan.tasks[0].name}")
+                break
+
+            _print_plan(correction_plan)
+
+            if _requires_confirmation(correction_plan):
+                confirm_msg = "Corrected plan has non-approved command(s) [!]. Execute? [y/N]: "
+            else:
+                confirm_msg = f"Execute corrected plan (attempt {attempt})? [y/N]: "
+
+            try:
+                confirm = input(confirm_msg).strip().lower()
             except (KeyboardInterrupt, EOFError):
                 print("\nBye.")
-                break
-            if confirm != "y":
-                print("Cancelled.")
-                continue
-        else:
-            try:
-                confirm = input("Execute corrected plan? [y/N]: ").strip().lower()
-            except (KeyboardInterrupt, EOFError):
-                print("\nBye.")
-                break
-            if confirm != "y":
-                print("Cancelled.")
-                continue
+                return
 
-        _execute_plan(correction_plan, session)
+            if confirm != "y":
+                print("Cancelled.")
+                break
+
+            task_results = _execute_plan(correction_plan, session)
+
+            if attempt == MAX_RETRIES:
+                failed_final = [r for r in task_results if not r.success and not r.skipped]
+                if failed_final:
+                    retries_exhausted = True
+
+        _summarize(user_input, task_results, retries_exhausted=retries_exhausted)
 
 
 if __name__ == "__main__":

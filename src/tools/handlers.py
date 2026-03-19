@@ -18,6 +18,8 @@ def _coerce_args(raw) -> list[str]:
         except (json.JSONDecodeError, ValueError):
             pass
         return [raw] if raw else []
+    if raw is not None:
+        return [str(raw)]
     return []
 
 _SKILLS_DIR = os.path.join(os.path.dirname(__file__), "..", "skills")
@@ -46,6 +48,17 @@ def run_command(task: Task, session: SessionState) -> TaskResult:
     cmd = f"{name} {' '.join(args)}" if args else name
     stdout, stderr, returncode = get_os_handler().run_shell(cmd, cwd=session.cwd)
     return TaskResult(task=task, stdout=stdout, stderr=stderr, returncode=returncode)
+
+
+def write_file(task: Task, session: SessionState) -> TaskResult:
+    path = os.path.expanduser(str(task.params.get("path", task.name)))
+    if not os.path.isabs(path):
+        path = os.path.join(session.cwd, path)
+    content = str(task.params.get("content", ""))
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, "w") as f:
+        f.write(content)
+    return TaskResult(task=task, stdout=f"Written: {path}", returncode=0)
 
 
 def run_skill(task: Task, session: SessionState) -> TaskResult:

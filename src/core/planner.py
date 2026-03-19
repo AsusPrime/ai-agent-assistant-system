@@ -33,8 +33,12 @@ def _build_system_prompt() -> str:
         "If the user wants to run a command, use action='run_command', set 'name' to the command. "
         "For 'cd', always pass the target directory in params as {\"path\": \"/absolute/or/~/relative/path\"} — never use 'args' for cd. "
         "For all other commands, pass arguments in params as {\"args\": [\"arg1\", \"arg2\"]}. "
+        "CRITICAL: the value of 'args' MUST always be a JSON array of strings — never a number, boolean, or other scalar. "
         "If the user wants to run a script/skill, use action='run_skill' and set 'name' to the script from the allowed list. "
-        "Add verification steps after state-changing commands: after 'cd <dir>' add 'pwd'; after 'mkdir' add 'ls'. "
+        "Add verification steps after state-changing commands: after 'cd <dir>' add 'pwd'; after 'mkdir' add 'pwd'. "
+        "To create or write a file, use action='write_file', set 'name' to the filename, "
+        "params={'path': '/absolute/or/~/path/to/file', 'content': '<file content>'}. "
+        "Never use 'echo ... > file' for file creation. "
         "Decompose multi-step requests into an ordered list of Tasks."
     )
 

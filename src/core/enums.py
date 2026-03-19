@@ -6,3 +6,4 @@ class ActionTypeEnum(str, Enum):
     RUN_COMMAND = "run_command"
     RUN_SKILL = "run_skill"
     CHAT = "chat"
+    WRITE_FILE = "write_file"
