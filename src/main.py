@@ -23,35 +23,40 @@ def _load_auto_approved() -> set[str]:
     return set(wl.get("allowed_commands", []))
 
 
-def _requires_confirmation(plan: Plan) -> bool:
-    auto_cmds = _load_auto_approved()
-    for task in plan.tasks:
-        if task.action == ActionTypeEnum.RUN_COMMAND and task.name not in auto_cmds:
-            return True
-    return False
-
-
 def _print_plan(plan: Plan) -> None:
     print(f"[Plan] {len(plan.tasks)} step(s):")
-    auto_cmds = _load_auto_approved()
     for i, task in enumerate(plan.tasks, 1):
-        needs_confirm = (
-            task.action == ActionTypeEnum.RUN_COMMAND
-            and task.name not in auto_cmds
-        )
-        marker = " [!]" if needs_confirm else ""
-        print(f"  {i}.{marker} {task.action.value} | {task.name} | {task.params}")
+        print(f"  {i}. {task.action.value} | {task.name} | {task.params}")
     if plan.reasoning and settings.DEBUG:
         print(f"  Reasoning: {plan.reasoning}")
 
 
 def _execute_plan(plan: Plan, session: SessionState) -> list[TaskResult]:
     results: list[TaskResult] = []
+    auto_cmds = _load_auto_approved()
     failed = False
-    for task in plan.tasks:
+    for i, task in enumerate(plan.tasks, 1):
         if failed:
             results.append(TaskResult(task=task, skipped=True))
             continue
+
+        needs_confirm = (
+            task.action == ActionTypeEnum.RUN_COMMAND
+            and task.name not in auto_cmds
+        )
+        if needs_confirm:
+            try:
+                confirm = input(
+                    f"  Дія №{i} потребує дозволу: {task.action.value} | {task.name} | {task.params}. Виконати? [y/N]: "
+                ).strip().lower()
+            except (KeyboardInterrupt, EOFError):
+                raise
+            if confirm != "y":
+                print("Cancelled.")
+                results.append(TaskResult(task=task, skipped=True))
+                failed = True
+                continue
+
         t0 = time.monotonic()
         result = executor.execute(task, session)
         result.duration_ms = int((time.monotonic() - t0) * 1000)
@@ -63,6 +68,9 @@ def _execute_plan(plan: Plan, session: SessionState) -> list[TaskResult]:
         if not result.success:
             print(f"[Error] Step '{task.name}' failed (rc={result.returncode}). Stopping.")
             failed = True
+
+    session.execution_log.extend(results)
+
     if settings.DEBUG:
         _print_execution_log(results)
     return results
@@ -141,17 +149,11 @@ def main() -> None:
 
         _print_plan(plan)
 
-        if _requires_confirmation(plan):
-            try:
-                confirm = input("Plan contains non-approved command(s) [!]. Execute? [y/N]: ").strip().lower()
-            except (KeyboardInterrupt, EOFError):
-                print("\nBye.")
-                break
-            if confirm != "y":
-                print("Cancelled.")
-                continue
-
-        task_results = _execute_plan(plan, session)
+        try:
+            task_results = _execute_plan(plan, session)
+        except (KeyboardInterrupt, EOFError):
+            print("\nBye.")
+            return
         retries_exhausted = False
 
         for attempt in range(1, MAX_RETRIES + 1):
@@ -179,13 +181,8 @@ def main() -> None:
 
             _print_plan(correction_plan)
 
-            if _requires_confirmation(correction_plan):
-                confirm_msg = "Corrected plan has non-approved command(s) [!]. Execute? [y/N]: "
-            else:
-                confirm_msg = f"Execute corrected plan (attempt {attempt})? [y/N]: "
-
             try:
-                confirm = input(confirm_msg).strip().lower()
+                confirm = input(f"Execute corrected plan (attempt {attempt})? [y/N]: ").strip().lower()
             except (KeyboardInterrupt, EOFError):
                 print("\nBye.")
                 return
@@ -194,7 +191,11 @@ def main() -> None:
                 print("Cancelled.")
                 break
 
-            task_results = _execute_plan(correction_plan, session)
+            try:
+                task_results = _execute_plan(correction_plan, session)
+            except (KeyboardInterrupt, EOFError):
+                print("\nBye.")
+                return
 
             if attempt == MAX_RETRIES:
                 failed_final = [r for r in task_results if not r.success and not r.skipped]

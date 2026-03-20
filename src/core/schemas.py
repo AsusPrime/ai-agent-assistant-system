@@ -1,7 +1,7 @@
 import json
 import os
 from pydantic import BaseModel, model_validator
-from typing import Dict, Any
+from typing import Dict
 
 from core.enums import ActionTypeEnum
 
@@ -16,7 +16,7 @@ _WHITELIST_PATH = os.path.join(
 class Task(BaseModel):
     action: ActionTypeEnum
     name: str
-    params: Dict[str, Any] = {}
+    params: Dict[str, str | list[str] | None] = {}
 
     @model_validator(mode="after")
     def check_allowed(self) -> "Task":
