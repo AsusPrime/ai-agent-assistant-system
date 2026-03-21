@@ -55,10 +55,26 @@ def write_file(task: Task, session: SessionState) -> TaskResult:
     if not os.path.isabs(path):
         path = os.path.join(session.cwd, path)
     content = str(task.params.get("content", ""))
+    append = str(task.params.get("append", "")).lower() in ("true", "1", "yes")
     os.makedirs(os.path.dirname(path), exist_ok=True)
-    with open(path, "w") as f:
+    mode = "a" if append else "w"
+    with open(path, mode) as f:
+        if append and os.path.exists(path) and os.path.getsize(path) > 0:
+            f.write("\n")
         f.write(content)
-    return TaskResult(task=task, stdout=f"Written: {path}", returncode=0)
+    action = "Appended" if append else "Written"
+    return TaskResult(task=task, stdout=f"{action}: {path}", returncode=0)
+
+
+def read_file(task: Task, session: SessionState) -> TaskResult:
+    path = os.path.expanduser(str(task.params.get("path", task.name)))
+    if not os.path.isabs(path):
+        path = os.path.join(session.cwd, path)
+    if not os.path.isfile(path):
+        return TaskResult(task=task, stderr=f"File not found: {path}", returncode=1)
+    with open(path, "r") as f:
+        content = f.read()
+    return TaskResult(task=task, stdout=content, returncode=0)
 
 
 def run_skill(task: Task, session: SessionState) -> TaskResult:

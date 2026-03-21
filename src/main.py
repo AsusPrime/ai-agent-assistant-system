@@ -17,6 +17,31 @@ MAX_RETRIES = 3
 _WHITELIST_PATH = Path(__file__).parent / "tools" / "whitelist.json"
 
 
+def _unmask_str(s: str, mapping: dict[str, str]) -> str:
+    for placeholder, original in mapping.items():
+        s = s.replace(placeholder, original)
+    return s
+
+
+def _unmask_plan(plan: Plan, mapping: dict[str, str]) -> Plan:
+    """Replace all placeholders in task names and params with original values."""
+    if not mapping:
+        return plan
+    unmasked_tasks = []
+    for task in plan.tasks:
+        unmasked_name = _unmask_str(task.name, mapping)
+        unmasked_params: dict = {}
+        for k, v in task.params.items():
+            if isinstance(v, str):
+                unmasked_params[k] = _unmask_str(v, mapping)
+            elif isinstance(v, list):
+                unmasked_params[k] = [_unmask_str(i, mapping) if isinstance(i, str) else i for i in v]
+            else:
+                unmasked_params[k] = v
+        unmasked_tasks.append(task.model_copy(update={"name": unmasked_name, "params": unmasked_params}))
+    return plan.model_copy(update={"tasks": unmasked_tasks})
+
+
 def _load_auto_approved() -> set[str]:
     with open(_WHITELIST_PATH) as f:
         wl = json.load(f)
@@ -82,23 +107,27 @@ def _print_execution_log(results: list[TaskResult]) -> None:
         print(f"  {r.status:7} | {r.task.action.value:12} | {r.task.name} | {r.duration_ms}ms")
 
 
-def _build_correction_prompt(results: list[TaskResult]) -> str:
+def _build_correction_prompt(results: list[TaskResult], guard: PrivacyGuard) -> str:
     lines = ["The following steps were executed and one failed. Suggest a corrected plan:"]
     for r in results:
         lines.append(f"  [{r.status}] {r.task.action.value} {r.task.name} → rc={r.returncode}")
         if r.stdout.strip():
-            lines.append(f"    stdout: {r.stdout.strip()[:200]!r}")
+            masked, _ = guard.mask(r.stdout.strip()[:200])
+            lines.append(f"    stdout: {masked!r}")
         if r.stderr.strip():
-            lines.append(f"    stderr: {r.stderr.strip()[:200]!r}")
+            masked, _ = guard.mask(r.stderr.strip()[:200])
+            lines.append(f"    stderr: {masked!r}")
     return "\n".join(lines)
 
 
-def _summarize(user_input: str, results: list[TaskResult], retries_exhausted: bool = False) -> None:
+def _summarize(user_input: str, results: list[TaskResult], guard: PrivacyGuard, retries_exhausted: bool = False) -> None:
     lines = [f'User asked: "{user_input}"', "Execution results:"]
     for r in results:
+        masked_out, _ = guard.mask(r.stdout.strip()[:100])
+        masked_err, _ = guard.mask(r.stderr.strip()[:100])
         lines.append(
             f"  [{r.status}] {r.task.name} → "
-            f"stdout: {r.stdout.strip()[:100]!r}, stderr: {r.stderr.strip()[:100]!r}"
+            f"stdout: {masked_out!r}, stderr: {masked_err!r}"
         )
     if retries_exhausted:
         lines.append("\nAll retry attempts failed. Inform the user clearly.")
@@ -130,8 +159,10 @@ def main() -> None:
             continue
 
         masked_input, pii_map = guard.mask(user_input)
+        session.pii_map = pii_map
         if pii_map:
             print(f"[Privacy] Masked {len(pii_map)} sensitive pattern(s) before sending to LLM.")
+            session.privacy_events.append({"input_length": len(user_input), "masked_count": len(pii_map)})
 
         try:
             result = planner_agent.run_sync(masked_input, message_history=session.message_history)
@@ -140,7 +171,7 @@ def main() -> None:
             continue
 
         session.message_history = result.all_messages()
-        plan: Plan = result.output
+        plan: Plan = _unmask_plan(result.output, pii_map)
 
         # Chat-only plan: no HITL
         if len(plan.tasks) == 1 and plan.tasks[0].action == ActionTypeEnum.CHAT:
@@ -162,7 +193,7 @@ def main() -> None:
                 break
 
             print(f"[Correction] Attempt {attempt}/{MAX_RETRIES} — asking LLM for a corrected plan...")
-            correction_prompt = _build_correction_prompt(task_results)
+            correction_prompt = _build_correction_prompt(task_results, guard)
 
             try:
                 correction_result = planner_agent.run_sync(
@@ -173,7 +204,7 @@ def main() -> None:
                 break
 
             session.message_history = correction_result.all_messages()
-            correction_plan: Plan = correction_result.output
+            correction_plan: Plan = _unmask_plan(correction_result.output, pii_map)
 
             if len(correction_plan.tasks) == 1 and correction_plan.tasks[0].action == ActionTypeEnum.CHAT:
                 print(f"Assistant: {correction_plan.tasks[0].name}")
@@ -202,7 +233,7 @@ def main() -> None:
                 if failed_final:
                     retries_exhausted = True
 
-        _summarize(user_input, task_results, retries_exhausted=retries_exhausted)
+        _summarize(user_input, task_results, guard, retries_exhausted=retries_exhausted)
 
 
 if __name__ == "__main__":
