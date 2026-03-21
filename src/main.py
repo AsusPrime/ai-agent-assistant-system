@@ -159,7 +159,7 @@ def main() -> None:
             continue
 
         masked_input, pii_map = guard.mask(user_input)
-        session.pii_map = pii_map
+        session.pii_map.update(pii_map)
         if pii_map:
             print(f"[Privacy] Masked {len(pii_map)} sensitive pattern(s) before sending to LLM.")
             session.privacy_events.append({"input_length": len(user_input), "masked_count": len(pii_map)})
@@ -171,7 +171,7 @@ def main() -> None:
             continue
 
         session.message_history = result.all_messages()
-        plan: Plan = _unmask_plan(result.output, pii_map)
+        plan: Plan = _unmask_plan(result.output, session.pii_map)
 
         # Chat-only plan: no HITL
         if len(plan.tasks) == 1 and plan.tasks[0].action == ActionTypeEnum.CHAT:
@@ -204,7 +204,7 @@ def main() -> None:
                 break
 
             session.message_history = correction_result.all_messages()
-            correction_plan: Plan = _unmask_plan(correction_result.output, pii_map)
+            correction_plan: Plan = _unmask_plan(correction_result.output, session.pii_map)
 
             if len(correction_plan.tasks) == 1 and correction_plan.tasks[0].action == ActionTypeEnum.CHAT:
                 print(f"Assistant: {correction_plan.tasks[0].name}")
