@@ -111,6 +111,26 @@ def _print_execution_log(results: list[TaskResult]) -> None:
         print(f"  {r.status:7} | {r.task.action.value:12} | {r.task.name} | {r.duration_ms}ms")
 
 
+def _is_history_malformed_error(err: Exception) -> bool:
+    msg = str(err).lower()
+    return "function response" in msg or "function call" in msg
+
+
+def _run_planner(prompt: str, session: SessionState):
+    """Run planner with message history; on malformed-history errors, retry fresh."""
+    try:
+        return planner_agent.run_sync(prompt, message_history=session.message_history)
+    except Exception as e:
+        if _is_history_malformed_error(e) and session.message_history:
+            if settings.DEBUG:
+                print(f"[Memory] History rejected by LLM, retrying without it: {e}")
+            else:
+                print("[Memory] Previous session history was malformed — starting fresh.")
+            session.message_history = []
+            return planner_agent.run_sync(prompt)
+        raise
+
+
 def _build_correction_prompt(results: list[TaskResult], guard: PrivacyGuard) -> str:
     lines = ["The following steps were executed and one failed. Suggest a corrected plan:"]
     for r in results:
@@ -175,7 +195,7 @@ def main() -> None:
 
         prev_len = len(session.message_history)
         try:
-            result = planner_agent.run_sync(masked_input, message_history=session.message_history)
+            result = _run_planner(masked_input, session)
         except Exception as e:
             print(f"[LLM Error] {e}")
             continue
@@ -210,9 +230,7 @@ def main() -> None:
 
             prev_len = len(session.message_history)
             try:
-                correction_result = planner_agent.run_sync(
-                    correction_prompt, message_history=session.message_history
-                )
+                correction_result = _run_planner(correction_prompt, session)
             except Exception as e:
                 print(f"[LLM Error] {e}")
                 break
