@@ -2,6 +2,8 @@ import json
 import time
 from pathlib import Path
 
+from prompt_toolkit import PromptSession
+
 from config import settings
 from core.enums import ActionTypeEnum
 from core.executor import Executor
@@ -153,9 +155,11 @@ def main() -> None:
     if settings.DEBUG:
         print("[DEBUG mode ON]")
 
+    prompt_session: PromptSession = PromptSession()
+
     while True:
         try:
-            user_input = input("\n> ").strip()
+            user_input = prompt_session.prompt("\n> ").strip()
         except (KeyboardInterrupt, EOFError):
             print("\nBye.")
             break
