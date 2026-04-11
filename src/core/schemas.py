@@ -22,7 +22,13 @@ class Task(BaseModel):
     def check_allowed(self) -> "Task":
         if self.action == ActionTypeEnum.CHAT:
             return self
-        if self.action in (ActionTypeEnum.RUN_COMMAND, ActionTypeEnum.WRITE_FILE, ActionTypeEnum.READ_FILE):
+        if self.action in (
+            ActionTypeEnum.RUN_COMMAND,
+            ActionTypeEnum.WRITE_FILE,
+            ActionTypeEnum.READ_FILE,
+            ActionTypeEnum.SEARCH_KNOWLEDGE,
+            ActionTypeEnum.INDEX_KNOWLEDGE,
+        ):
             return self  # any command/file allowed; HITL is the safety net
         with open(_WHITELIST_PATH) as f:
             wl = json.load(f)

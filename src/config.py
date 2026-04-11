@@ -12,6 +12,11 @@ class Settings(BaseSettings):
     LLM_PROVIDER: str = "gemini"
     API_KEY: str = ""
     MODEL_NAME: str = "gemini-2.0-flash"
+    LLM_BASE_URL: str = "http://localhost:11434/v1"
+
+    DATA_DIR: str = "~/.my_data"
+    MEMORY_TURNS: int = 8
+
     DEBUG: bool = False
 
 

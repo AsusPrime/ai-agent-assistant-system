@@ -17,11 +17,11 @@ def get_model() -> Model:
         )
     elif settings.LLM_PROVIDER == "ollama":
         from pydantic_ai.models.openai import OpenAIChatModel
+        from pydantic_ai.providers.openai import OpenAIProvider
 
         return OpenAIChatModel(
             settings.MODEL_NAME,
-            base_url="http://localhost:11434/v1",
-            api_key="ollama",
+            provider=OpenAIProvider(base_url=settings.LLM_BASE_URL, api_key="ollama"),
         )
     else:
         raise ValueError(f"Unknown LLM_PROVIDER: {settings.LLM_PROVIDER}")

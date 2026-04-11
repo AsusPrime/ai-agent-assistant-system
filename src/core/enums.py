@@ -8,3 +8,5 @@ class ActionTypeEnum(str, Enum):
     CHAT = "chat"
     WRITE_FILE = "write_file"
     READ_FILE = "read_file"
+    SEARCH_KNOWLEDGE = "search_knowledge"
+    INDEX_KNOWLEDGE = "index_knowledge"

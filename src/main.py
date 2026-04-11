@@ -5,13 +5,15 @@ from pathlib import Path
 from config import settings
 from core.enums import ActionTypeEnum
 from core.executor import Executor
+from core.memory import MessageRepository
 from core.planner import planner_agent
 from core.privacy import PrivacyGuard
-from core.schemas import Plan, Task, TaskResult
+from core.schemas import Plan, TaskResult
 from core.session import SessionState
 from core.summarizer import summary_agent
 
 executor = Executor()
+_msg_repo = MessageRepository(data_dir=settings.DATA_DIR)
 MAX_RETRIES = 3
 
 _WHITELIST_PATH = Path(__file__).parent / "tools" / "whitelist.json"
@@ -144,6 +146,9 @@ def _summarize(user_input: str, results: list[TaskResult], guard: PrivacyGuard, 
 def main() -> None:
     session = SessionState()
     guard = PrivacyGuard()
+    session.message_history = _msg_repo.load_recent(settings.MEMORY_TURNS)
+    if session.message_history:
+        print("[Memory] Restored context from previous session.")
     print("Assistant is ready. Type your request (Ctrl+C to exit).")
     if settings.DEBUG:
         print("[DEBUG mode ON]")
@@ -164,6 +169,7 @@ def main() -> None:
             print(f"[Privacy] Masked {len(pii_map)} sensitive pattern(s) before sending to LLM.")
             session.privacy_events.append({"input_length": len(user_input), "masked_count": len(pii_map)})
 
+        prev_len = len(session.message_history)
         try:
             result = planner_agent.run_sync(masked_input, message_history=session.message_history)
         except Exception as e:
@@ -171,6 +177,9 @@ def main() -> None:
             continue
 
         session.message_history = result.all_messages()
+        new_msgs = session.message_history[prev_len:]
+        if new_msgs:
+            _msg_repo.save_turn(session.session_id, new_msgs)
         plan: Plan = _unmask_plan(result.output, session.pii_map)
 
         # Chat-only plan: no HITL
@@ -195,6 +204,7 @@ def main() -> None:
             print(f"[Correction] Attempt {attempt}/{MAX_RETRIES} — asking LLM for a corrected plan...")
             correction_prompt = _build_correction_prompt(task_results, guard)
 
+            prev_len = len(session.message_history)
             try:
                 correction_result = planner_agent.run_sync(
                     correction_prompt, message_history=session.message_history
@@ -204,6 +214,9 @@ def main() -> None:
                 break
 
             session.message_history = correction_result.all_messages()
+            new_msgs = session.message_history[prev_len:]
+            if new_msgs:
+                _msg_repo.save_turn(session.session_id, new_msgs)
             correction_plan: Plan = _unmask_plan(correction_result.output, session.pii_map)
 
             if len(correction_plan.tasks) == 1 and correction_plan.tasks[0].action == ActionTypeEnum.CHAT:

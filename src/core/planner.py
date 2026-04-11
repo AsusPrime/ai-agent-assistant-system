@@ -42,7 +42,10 @@ def _build_system_prompt() -> str:
         "Never use 'echo ... > file' for file creation. "
         "To read a file, use action='read_file', set 'name' to the filename, "
         "params={'path': '/absolute/or/~/path/to/file'}. "
-        "Decompose multi-step requests into an ordered list of Tasks."
+        "Decompose multi-step requests into an ordered list of Tasks. "
+        "Conversation history is provided via message_history — use it directly for questions about prior turns, do not call tools to retrieve it. "
+        "action='search_knowledge' (params={'query': ...}) queries the user's indexed local files/documents. "
+        "action='index_knowledge' (params={'path': ...}) adds a file or directory to that knowledge base."
     )
 
 

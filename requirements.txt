@@ -1,4 +1,5 @@
 ag-ui-protocol==0.1.13
+chromadb==1.5.5
 aiofile==3.9.0
 aiohappyeyeballs==2.6.1
 aiohttp==3.13.3
