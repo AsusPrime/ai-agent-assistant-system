@@ -2,7 +2,6 @@
 
 import os
 import sys
-import tempfile
 
 import chromadb
 import pytest
@@ -11,7 +10,7 @@ import pytest
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
 from core.vector_store import VectorStore, _chunk_text
-from core.schemas import Task, TaskResult
+from core.schemas import Task
 from core.enums import ActionTypeEnum
 from core.session import SessionState
 
@@ -19,6 +18,7 @@ from core.session import SessionState
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
+
 
 class _FakeEmbedding(chromadb.EmbeddingFunction):
     """Deterministic embedding: hash-based, no API calls."""
@@ -71,6 +71,7 @@ def _make_task(action: str, name: str = "", **params) -> Task:
 # _chunk_text unit tests
 # ---------------------------------------------------------------------------
 
+
 class TestChunkText:
     def test_single_paragraph(self):
         chunks = _chunk_text("Hello world")
@@ -104,6 +105,7 @@ class TestChunkText:
 # ---------------------------------------------------------------------------
 # VectorStore tests
 # ---------------------------------------------------------------------------
+
 
 class TestVectorStoreIndexFile:
     def test_index_and_search(self, tmp_store, sample_file):
@@ -177,6 +179,7 @@ class TestVectorStoreSearch:
 # ---------------------------------------------------------------------------
 # rag_handler tests (search_knowledge / index_knowledge)
 # ---------------------------------------------------------------------------
+
 
 class TestSearchKnowledge:
     def test_empty_query(self):
