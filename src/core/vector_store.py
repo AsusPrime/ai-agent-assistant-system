@@ -30,7 +30,9 @@ class _GeminiEmbeddingFunction(chromadb.EmbeddingFunction):
         return result
 
 
-def _chunk_text(text: str, chunk_size: int = _CHUNK_SIZE, overlap: int = _CHUNK_OVERLAP) -> list[str]:
+def _chunk_text(
+    text: str, chunk_size: int = _CHUNK_SIZE, overlap: int = _CHUNK_OVERLAP
+) -> list[str]:
     paragraphs = [p.strip() for p in text.split("\n\n") if p.strip()]
     chunks: list[str] = []
     current = ""
@@ -50,7 +52,7 @@ def _chunk_text(text: str, chunk_size: int = _CHUNK_SIZE, overlap: int = _CHUNK_
             final.append(chunk)
         else:
             for i in range(0, len(chunk), chunk_size - overlap):
-                final.append(chunk[i: i + chunk_size])
+                final.append(chunk[i : i + chunk_size])
     return final
 
 
@@ -80,7 +82,9 @@ class VectorStore:
         if not chunks:
             return 0
         ids = [f"{path}::{i}" for i in range(len(chunks))]
-        self._collection.upsert(ids=ids, documents=chunks, metadatas=[{"source": path}] * len(chunks))
+        self._collection.upsert(
+            ids=ids, documents=chunks, metadatas=[{"source": path}] * len(chunks)
+        )
         return len(chunks)
 
     def index_directory(self, dir_path: str) -> dict[str, int]:

@@ -30,7 +30,9 @@ def search_knowledge(task: Task, session: SessionState) -> TaskResult:
             returncode=0,
         )
     output = "\n\n---\n\n".join(chunks)
-    return TaskResult(task=task, stdout=f"[Knowledge base results]\n\n{output}", returncode=0)
+    return TaskResult(
+        task=task, stdout=f"[Knowledge base results]\n\n{output}", returncode=0
+    )
 
 
 def index_knowledge(task: Task, session: SessionState) -> TaskResult:

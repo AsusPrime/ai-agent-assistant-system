@@ -20,8 +20,7 @@ def _build_system_prompt() -> str:
     auto_cmds = wl["allowed_commands"]
     auto_apps = wl["allowed_apps"]
     scripts = [
-        s for s in wl["allowed_scripts"]
-        if os.path.isfile(os.path.join(_SKILLS_DIR, s))
+        s for s in wl["allowed_scripts"] if os.path.isfile(os.path.join(_SKILLS_DIR, s))
     ]
     return (
         f"You are an AI system orchestrator running on {os_info}. "
@@ -40,7 +39,7 @@ def _build_system_prompt() -> str:
         "If the user wants to open an app, use action='open_app' and set 'name' to the app name from the auto-approved list. "
         "If the user wants to run a command, use action='run_command', set 'name' to the command. "
         "For 'cd', always pass the target directory in params as {\"path\": \"/absolute/or/~/relative/path\"} — never use 'args' for cd. "
-        "For all other commands, pass arguments in params as {\"args\": [\"arg1\", \"arg2\"]}. "
+        'For all other commands, pass arguments in params as {"args": ["arg1", "arg2"]}. '
         "CRITICAL: the value of 'args' MUST always be a JSON array of strings — never a number, boolean, or other scalar. "
         "If the user wants to run a script/skill, use action='run_skill' and set 'name' to the script from the allowed list. "
         "Add verification steps after state-changing commands: after 'cd <dir>' add 'pwd'; after 'mkdir' add 'pwd'. "

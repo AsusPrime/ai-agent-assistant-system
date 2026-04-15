@@ -22,6 +22,7 @@ def _coerce_args(raw) -> list[str]:
         return [str(raw)]
     return []
 
+
 _SKILLS_DIR = os.path.join(os.path.dirname(__file__), "..", "skills")
 
 
@@ -41,9 +42,13 @@ def run_command(task: Task, session: SessionState) -> TaskResult:
             new_cwd = os.path.normpath(os.path.join(session.cwd, new_cwd))
         if os.path.isdir(new_cwd):
             session.cwd = new_cwd
-            return TaskResult(task=task, stdout=f"Changed to {session.cwd}", returncode=0)
+            return TaskResult(
+                task=task, stdout=f"Changed to {session.cwd}", returncode=0
+            )
         else:
-            return TaskResult(task=task, stderr=f"cd: {new_cwd}: No such directory", returncode=1)
+            return TaskResult(
+                task=task, stderr=f"cd: {new_cwd}: No such directory", returncode=1
+            )
 
     cmd = f"{name} {' '.join(args)}" if args else name
     stdout, stderr, returncode = get_os_handler().run_shell(cmd, cwd=session.cwd)
@@ -83,4 +88,9 @@ def run_skill(task: Task, session: SessionState) -> TaskResult:
     result = subprocess.run(
         ["python3", skill_path] + args, capture_output=True, text=True, cwd=session.cwd
     )
-    return TaskResult(task=task, stdout=result.stdout, stderr=result.stderr, returncode=result.returncode)
+    return TaskResult(
+        task=task,
+        stdout=result.stdout,
+        stderr=result.stderr,
+        returncode=result.returncode,
+    )
