@@ -2,7 +2,7 @@ import sqlite3
 import time
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.concurrency import run_in_threadpool
 
 from api.schemas import (
@@ -17,40 +17,39 @@ from config import settings
 from core.akashi import AkashiCore
 
 
-_state: dict = {} # TODO: why do we need it?
-
-
-def _build_core() -> AkashiCore:
+def _build_core() -> tuple[AkashiCore, list[str]]:
     auto_approve = settings.API_AUTO_APPROVE
     confirm_fn = (lambda _msg: True) if auto_approve else (lambda _msg: False)
     messages: list[str] = []
     core = AkashiCore(confirm_fn=confirm_fn, on_message=messages.append)
-    _state["messages_buffer"] = messages
-    return core
+    return core, messages
 
 
 @asynccontextmanager
-async def lifespan(_app: FastAPI):
-    _state["core"] = _build_core()
-    _state["started_at"] = time.monotonic()
+async def lifespan(app: FastAPI):
+    core, messages = _build_core()
+    app.state.core = core
+    app.state.messages_buffer = messages
+    app.state.started_at = time.monotonic()
     yield
-    _state.clear()
+    app.state.core = None
+    app.state.messages_buffer = []
 
 
 app = FastAPI(title="Akashi API", version="0.1.0", lifespan=lifespan)
 
 
-def _get_core() -> AkashiCore:
-    core = _state.get("core")
+def _get_core(request: Request) -> AkashiCore:
+    core: AkashiCore | None = getattr(request.app.state, "core", None)
     if core is None:
         raise HTTPException(status_code=503, detail="core not initialized")
     return core
 
 
 @app.post("/query", response_model=QueryResponse)
-async def query(req: QueryRequest) -> QueryResponse:
-    core = _get_core()
-    buf: list[str] = _state["messages_buffer"]
+async def query(req: QueryRequest, request: Request) -> QueryResponse:
+    core = _get_core(request)
+    buf: list[str] = request.app.state.messages_buffer
     buf.clear()
 
     try:
@@ -78,9 +77,10 @@ async def query(req: QueryRequest) -> QueryResponse:
 
 
 @app.get("/status", response_model=StatusResponse)
-async def status() -> StatusResponse:
-    core = _get_core()
-    uptime = time.monotonic() - _state.get("started_at", time.monotonic())
+async def status(request: Request) -> StatusResponse:
+    core = _get_core(request)
+    started_at = getattr(request.app.state, "started_at", time.monotonic())
+    uptime = time.monotonic() - started_at
     return StatusResponse(
         status="ok",
         session_id=core.session.session_id,
@@ -91,8 +91,8 @@ async def status() -> StatusResponse:
 
 
 @app.get("/history", response_model=HistoryResponse)
-async def history(limit: int = 10) -> HistoryResponse:
-    core = _get_core()
+async def history(request: Request, limit: int = 10) -> HistoryResponse:
+    core = _get_core(request)
     db_path = core.msg_repo._db_path
     limit = max(1, min(limit, 100))
     with sqlite3.connect(db_path) as conn:

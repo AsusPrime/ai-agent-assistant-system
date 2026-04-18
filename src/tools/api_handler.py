@@ -2,11 +2,10 @@ import json
 
 import httpx
 
+from config import settings
 from core.schemas import Task, TaskResult
 from core.session import SessionState
 
-_DEFAULT_TIMEOUT = 15.0
-_MAX_BODY_LEN = 8000
 _ALLOWED_METHODS = {"GET", "POST", "PUT", "PATCH", "DELETE", "HEAD"}
 
 
@@ -24,6 +23,20 @@ def _coerce_dict(raw) -> dict:
     return {}
 
 
+def _parse_json_body(raw) -> tuple[dict | list | None, str | None]:
+    # Returns (parsed_body, error). `_coerce_dict` is not reused here because it
+    # silently swallows malformed JSON — for a request body we need an explicit
+    # error so the caller sees why the request was not sent.
+    if raw is None or isinstance(raw, (dict, list)):
+        return raw, None
+    if isinstance(raw, str):
+        try:
+            return json.loads(raw), None
+        except (json.JSONDecodeError, ValueError) as e:
+            return None, f"json param is not valid JSON: {e}"
+    return None, f"unsupported json param type: {type(raw).__name__}"
+
+
 def http_request(task: Task, session: SessionState) -> TaskResult:
     method = str(task.params.get("method", "GET")).upper()
     if method not in _ALLOWED_METHODS:
@@ -36,20 +49,15 @@ def http_request(task: Task, session: SessionState) -> TaskResult:
         return TaskResult(task=task, stderr=f"invalid url: {url}", returncode=1)
 
     headers = _coerce_dict(task.params.get("headers"))
-    json_body = task.params.get("json")
-    if isinstance(json_body, str): # TODO: is it not better to use _coerce_dict?
-        try:
-            json_body = json.loads(json_body)
-        except (json.JSONDecodeError, ValueError):
-            return TaskResult(
-                task=task, stderr="json param is not valid JSON", returncode=1
-            )
+    json_body, body_err = _parse_json_body(task.params.get("json"))
+    if body_err is not None:
+        return TaskResult(task=task, stderr=body_err, returncode=1)
 
-    raw_timeout = task.params.get("timeout", _DEFAULT_TIMEOUT)
+    raw_timeout = task.params.get("timeout", settings.HTTP_TIMEOUT)
     try:
-        timeout = float(raw_timeout) if raw_timeout is not None else _DEFAULT_TIMEOUT
+        timeout = float(raw_timeout) if raw_timeout is not None else settings.HTTP_TIMEOUT
     except (TypeError, ValueError):
-        timeout = _DEFAULT_TIMEOUT
+        timeout = settings.HTTP_TIMEOUT
 
     try:
         resp = httpx.request(
@@ -64,8 +72,8 @@ def http_request(task: Task, session: SessionState) -> TaskResult:
         return TaskResult(task=task, stderr=f"request failed: {e}", returncode=1)
 
     body = resp.text
-    if len(body) > _MAX_BODY_LEN:
-        body = body[:_MAX_BODY_LEN] + "\n... [truncated]"
+    if len(body) > settings.HTTP_MAX_BODY_LEN:
+        body = body[: settings.HTTP_MAX_BODY_LEN] + "\n... [truncated]"
 
     out = {
         "status_code": resp.status_code,

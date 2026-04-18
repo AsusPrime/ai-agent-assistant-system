@@ -23,5 +23,11 @@ class Settings(BaseSettings):
     API_PORT: int = 8000
     API_AUTO_APPROVE: bool = False
 
+    WEB_TIMEOUT: float = 10.0
+    HTTP_TIMEOUT: float = 15.0
+    WEB_MAX_RESULTS: int = 5
+    WEB_MAX_TEXT_LEN: int = 8000
+    HTTP_MAX_BODY_LEN: int = 8000
+
 
 settings = Settings()

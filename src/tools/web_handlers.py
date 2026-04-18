@@ -4,12 +4,10 @@ import httpx
 import trafilatura
 from ddgs import DDGS
 
+from config import settings
 from core.schemas import Task, TaskResult
 from core.session import SessionState
 
-_DEFAULT_TIMEOUT = 10.0 # TODO: move it out, in env or other places because i think its bad practice to save it here
-_MAX_RESULTS = 5
-_MAX_TEXT_LEN = 8000
 _USER_AGENT = (
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
     "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36"
@@ -21,11 +19,11 @@ def web_search(task: Task, session: SessionState) -> TaskResult:
     if not query:
         return TaskResult(task=task, stderr="empty query", returncode=1)
 
-    raw_max = task.params.get("max_results", _MAX_RESULTS)
+    raw_max = task.params.get("max_results", settings.WEB_MAX_RESULTS)
     try:
-        max_results = int(raw_max) if raw_max is not None else _MAX_RESULTS
+        max_results = int(raw_max) if raw_max is not None else settings.WEB_MAX_RESULTS
     except (TypeError, ValueError):
-        max_results = _MAX_RESULTS
+        max_results = settings.WEB_MAX_RESULTS
 
     try:
         results = DDGS().text(query, max_results=max_results)
@@ -55,7 +53,7 @@ def web_read(task: Task, session: SessionState) -> TaskResult:
     try:
         resp = httpx.get(
             url,
-            timeout=_DEFAULT_TIMEOUT,
+            timeout=settings.WEB_TIMEOUT,
             follow_redirects=True,
             headers={"User-Agent": _USER_AGENT},
         )
@@ -68,6 +66,6 @@ def web_read(task: Task, session: SessionState) -> TaskResult:
         return TaskResult(
             task=task, stderr="no extractable content", returncode=1
         )
-    if len(text) > _MAX_TEXT_LEN:
-        text = text[:_MAX_TEXT_LEN] + "\n... [truncated]"
+    if len(text) > settings.WEB_MAX_TEXT_LEN:
+        text = text[: settings.WEB_MAX_TEXT_LEN] + "\n... [truncated]"
     return TaskResult(task=task, stdout=text, returncode=0)

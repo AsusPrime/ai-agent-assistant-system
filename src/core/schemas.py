@@ -1,16 +1,12 @@
 import json
-import os
+from pathlib import Path
 from pydantic import BaseModel, model_validator
 from typing import Dict
 
 from core.enums import ActionTypeEnum
 
-_WHITELIST_PATH = os.path.join(
-    os.path.dirname(__file__),
-    "..",
-    "tools",
-    "whitelist.json",  # TODO: не подобається те що воно від цього відносного шляху, треба якось зробити щоб у проекта коренева папка була там де CLAUDE.md
-)
+# src/core/schemas.py → src/tools/whitelist.json
+_WHITELIST_PATH = Path(__file__).resolve().parent.parent / "tools" / "whitelist.json"
 
 
 class Task(BaseModel):
