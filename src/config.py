@@ -19,5 +19,9 @@ class Settings(BaseSettings):
 
     DEBUG: bool = False
 
+    API_HOST: str = "127.0.0.1"
+    API_PORT: int = 8000
+    API_AUTO_APPROVE: bool = False
+
 
 settings = Settings()

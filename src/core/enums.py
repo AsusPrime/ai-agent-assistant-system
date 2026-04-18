@@ -10,3 +10,6 @@ class ActionTypeEnum(str, Enum):
     READ_FILE = "read_file"
     SEARCH_KNOWLEDGE = "search_knowledge"
     INDEX_KNOWLEDGE = "index_knowledge"
+    WEB_SEARCH = "web_search"
+    WEB_READ = "web_read"
+    HTTP_REQUEST = "http_request"

@@ -28,6 +28,9 @@ class Task(BaseModel):
             ActionTypeEnum.READ_FILE,
             ActionTypeEnum.SEARCH_KNOWLEDGE,
             ActionTypeEnum.INDEX_KNOWLEDGE,
+            ActionTypeEnum.WEB_SEARCH,
+            ActionTypeEnum.WEB_READ,
+            ActionTypeEnum.HTTP_REQUEST,
         ):
             return self  # any command/file allowed; HITL is the safety net
         with open(_WHITELIST_PATH) as f:

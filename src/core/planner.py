@@ -52,7 +52,12 @@ def _build_system_prompt() -> str:
         "Decompose multi-step requests into an ordered list of Tasks. "
         "Conversation history is provided via message_history — use it directly for questions about prior turns, do not call tools to retrieve it. "
         "action='search_knowledge' (params={'query': ...}) queries the user's indexed local files/documents. "
-        "action='index_knowledge' (params={'path': ...}) adds a file or directory to that knowledge base."
+        "action='index_knowledge' (params={'path': ...}) adds a file or directory to that knowledge base. "
+        "action='web_search' (params={'query': ...,'max_results': 5}) does a DuckDuckGo web search and returns title/url/snippet JSON. "
+        "action='web_read' (params={'url': ...}) fetches a web page and returns its main text content. "
+        "action='http_request' (params={'method': 'GET'|'POST'|..., 'url': ..., 'headers': {...}, 'json': {...}, 'timeout': 15}) calls an arbitrary HTTP API. "
+        "Prefer 'web_search' for general lookup, 'web_read' for reading a known page, 'http_request' only for structured APIs. "
+        "If the user asks a follow-up about something already fetched in this conversation, answer from message_history — do NOT call web_search/web_read again."
     )
 
 
