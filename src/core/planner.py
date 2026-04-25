@@ -1,9 +1,11 @@
 import json
 import os
 import platform
+from typing import Any
 
 from pydantic_ai import Agent
 
+from config import settings
 from core.schemas import Plan
 from infrastructure.llm_client import get_model
 
@@ -13,7 +15,7 @@ _WHITELIST_PATH = os.path.join(
 _SKILLS_DIR = os.path.join(os.path.dirname(__file__), "..", "skills")
 
 
-def _build_system_prompt() -> str:
+def build_system_prompt(mcp_tools_section: str = "") -> str:
     with open(_WHITELIST_PATH) as f:
         wl = json.load(f)
     os_info = f"{platform.system()} {platform.release()}"
@@ -22,7 +24,7 @@ def _build_system_prompt() -> str:
     scripts = [
         s for s in wl["allowed_scripts"] if os.path.isfile(os.path.join(_SKILLS_DIR, s))
     ]
-    return (
+    base = (
         f"You are an AI system orchestrator running on {os_info}. "
         "Return ONLY a Plan object with a list of Task steps. Never explain outside the Plan. "
         f"Auto-approved apps (no confirmation needed): {auto_apps}. "
@@ -59,10 +61,132 @@ def _build_system_prompt() -> str:
         "Prefer 'web_search' for general lookup, 'web_read' for reading a known page, 'http_request' only for structured APIs. "
         "If the user asks a follow-up about something already fetched in this conversation, answer from message_history — do NOT call web_search/web_read again."
     )
+    if mcp_tools_section:
+        base = base + "\n\n" + mcp_tools_section
+    return base
 
 
-planner_agent = Agent(
-    model=get_model(),
-    output_type=Plan,
-    system_prompt=_build_system_prompt(),
-)
+def format_mcp_tools_section(
+    tools: list[dict[str, Any]],
+    servers: list[str] | None = None,
+) -> str:
+    """Render a list of MCP tools into a concise system-prompt section.
+
+    `tools` is the output of `MCPManager.list_tools()`: each entry has
+    `name`, `description`, `input_schema`.
+    `servers` is the list of configured MCP server names (for clarity —
+    LLMs otherwise confuse server names with tool names).
+    """
+    if not tools:
+        return ""
+    lines = [
+        "You also have external tools available via the Model Context Protocol (MCP).",
+        "",
+        "How to invoke an MCP tool (flat, same shape as other actions):",
+        "  action='mcp_call'",
+        "  name=<EXACT tool name from the list below>",
+        "  params=<the tool's arguments as a plain dict>",
+        "",
+        "RULES:",
+        "  * `name` MUST be one of the tool names listed below — never a server name.",
+        "  * Never invent tool names. If the tool you want is not in the list below,",
+        "    it does not exist.",
+        "  * `params` contains the tool's arguments directly — do NOT wrap them in",
+        '    an "args" key, do NOT stringify to JSON.',
+    ]
+
+    if servers:
+        lines += [
+            "",
+            "MCP servers present (providers only — these names are NEVER valid `name` values):",
+            *(f"  - {s}" for s in servers),
+        ]
+
+    lines += [
+        "",
+        "Available MCP tools (use the EXACT arg names shown):",
+    ]
+    for t in tools:
+        lines.append(_render_tool_block(t))
+
+    lines += [
+        "",
+        "Use MCP tools only when the user clearly needs them (external docs/services).",
+        "For vague requests ('try X', 'use X'), pick a specific tool from the list first.",
+    ]
+    return "\n".join(lines)
+
+
+_JSON_TYPE_MAP = {
+    "string": "str",
+    "integer": "int",
+    "number": "float",
+    "boolean": "bool",
+    "array": "list",
+    "object": "dict",
+}
+
+
+def _render_tool_block(t: dict[str, Any]) -> str:
+    name = t.get("name", "?")
+    desc = (t.get("description") or "").strip().replace("\n", " ")
+    max_len = settings.MCP_DESC_MAX_LEN
+    if len(desc) > max_len:
+        desc = desc[: max_len - 3] + "..."
+
+    schema = t.get("input_schema") or {}
+    props = (schema.get("properties") if isinstance(schema, dict) else {}) or {}
+    required = set((schema.get("required") if isinstance(schema, dict) else []) or [])
+
+    parts: list[str] = []
+    if not props:
+        head = f"- {name}() — {desc}" if desc else f"- {name}()"
+        return head
+
+    typed_args = []
+    sample: dict[str, Any] = {}
+    for key, spec in props.items():
+        ptype = (spec or {}).get("type") if isinstance(spec, dict) else None
+        ptype_str = _JSON_TYPE_MAP.get(ptype or "", ptype or "any")
+        marker = "*" if key in required else ""
+        typed_args.append(f"{key}{marker}: {ptype_str}")
+        if key in required:
+            sample[key] = _placeholder_for(ptype_str)
+
+    head = f"- {name}({', '.join(typed_args)})"
+    parts.append(head)
+    if desc:
+        parts.append(f"    {desc}")
+    if sample:
+        parts.append(f"    e.g. params={json.dumps(sample, ensure_ascii=False)}")
+    elif props:
+        first_key = next(iter(props))
+        first_type = (
+            props[first_key].get("type") if isinstance(props[first_key], dict) else None
+        )
+        parts.append(
+            f"    e.g. params={json.dumps({first_key: _placeholder_for(_JSON_TYPE_MAP.get(first_type or '', 'any'))}, ensure_ascii=False)}"
+        )
+    return "\n".join(parts)
+
+
+def _placeholder_for(type_name: str) -> Any:
+    return {
+        "str": "<value>",
+        "int": 0,
+        "float": 0.0,
+        "bool": False,
+        "list": [],
+        "dict": {},
+    }.get(type_name, "<value>")
+
+
+def build_planner_agent(mcp_tools_section: str = "") -> Agent:
+    return Agent(
+        model=get_model(),
+        output_type=Plan,
+        system_prompt=build_system_prompt(mcp_tools_section),
+    )
+
+
+planner_agent = build_planner_agent()

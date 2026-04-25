@@ -31,9 +31,12 @@ async def lifespan(app: FastAPI):
     app.state.core = core
     app.state.messages_buffer = messages
     app.state.started_at = time.monotonic()
-    yield
-    app.state.core = None
-    app.state.messages_buffer = []
+    try:
+        yield
+    finally:
+        core.close()
+        app.state.core = None
+        app.state.messages_buffer = []
 
 
 app = FastAPI(title="Akashi API", version="0.1.0", lifespan=lifespan)
@@ -107,7 +110,9 @@ async def history(request: Request, limit: int = 10) -> HistoryResponse:
         try:
             import json as _json
 
-            parts = _json.loads(blob.decode("utf-8") if isinstance(blob, bytes) else blob)
+            parts = _json.loads(
+                blob.decode("utf-8") if isinstance(blob, bytes) else blob
+            )
         except Exception:
             parts = []
         turns.append(HistoryTurn(turn_index=turn_index, parts=parts))

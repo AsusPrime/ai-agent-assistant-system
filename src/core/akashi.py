@@ -7,13 +7,14 @@ from config import settings
 from core.enums import ActionTypeEnum
 from core.executor import Executor
 from core.memory import MessageRepository
-from core.planner import planner_agent
+from core.planner import build_planner_agent, format_mcp_tools_section, planner_agent
 from core.privacy import PrivacyGuard
 from core.schemas import Plan, TaskResult
 from core.session import SessionState
 from core.summarizer import summary_agent
+from integrations.mcp_client import MCPManager
+from integrations.mcp_config import load_config as load_mcp_config
 
-MAX_RETRIES = 3
 _WHITELIST_PATH = Path(__file__).resolve().parent.parent / "tools" / "whitelist.json"
 
 ConfirmFn = Callable[[str], bool]
@@ -41,6 +42,7 @@ class AkashiCore:
         self,
         confirm_fn: ConfirmFn | None = None,
         on_message: MessageFn | None = None,
+        mcp_manager: MCPManager | None = None,
     ):
         self.executor = Executor()
         self.guard = PrivacyGuard()
@@ -49,7 +51,41 @@ class AkashiCore:
         self._confirm = confirm_fn or self._default_confirm
         self._print = on_message or print
 
+        if mcp_manager is None:
+            cfg = load_mcp_config(settings.MCP_CONFIG_PATH)
+            mcp_manager = MCPManager(config=cfg)
+            try:
+                mcp_manager.start()
+            except Exception as e:
+                self._print(f"[MCP] Failed to start: {e}")
+        self.mcp_manager = mcp_manager
+        self.session.mcp_manager = mcp_manager
+        self.session.confirm_fn = self._confirm
+
+        self.planner_agent = self._build_planner_agent()
+
         self.session.message_history = self.msg_repo.load_recent(settings.MEMORY_TURNS)
+
+    def _build_planner_agent(self):
+        if self.mcp_manager is None or not self.mcp_manager.connected:
+            return planner_agent
+        try:
+            tools = self.mcp_manager.list_tools()
+        except Exception as e:
+            self._print(f"[MCP] list_tools failed, planner will not see MCP tools: {e}")
+            return planner_agent
+        if not tools:
+            return planner_agent
+        servers = list(self.mcp_manager.config.servers.keys())
+        section = format_mcp_tools_section(tools, servers=servers)
+        return build_planner_agent(section)
+
+    def close(self) -> None:
+        if self.mcp_manager is not None:
+            try:
+                self.mcp_manager.stop()
+            except Exception as e:
+                self._print(f"[MCP] Stop failed: {e}")
 
     @staticmethod
     def _default_confirm(prompt: str) -> bool:
@@ -100,10 +136,20 @@ class AkashiCore:
 
     def _run_planner(self, prompt: str):
         try:
-            return planner_agent.run_sync(
+            return self.planner_agent.run_sync(
                 prompt, message_history=self.session.message_history
             )
         except Exception as e:
+            if _is_event_loop_bound_error(e):
+                # pydantic-ai + google-genai caches httpx.AsyncClient whose
+                # asyncio primitives bind to the first run_sync's event loop.
+                # Rebuilding the agent forces a fresh client on the new loop.
+                if settings.DEBUG:
+                    self._print(f"[Planner] Event-loop mismatch, rebuilding agent: {e}")
+                self.planner_agent = self._build_planner_agent()
+                return self.planner_agent.run_sync(
+                    prompt, message_history=self.session.message_history
+                )
             if _is_history_malformed_error(e) and self.session.message_history:
                 if settings.DEBUG:
                     self._print(
@@ -114,7 +160,7 @@ class AkashiCore:
                         "[Memory] Previous session history was malformed — starting fresh."
                     )
                 self.session.message_history = []
-                return planner_agent.run_sync(prompt)
+                return self.planner_agent.run_sync(prompt)
             raise
 
     # -- execution -------------------------------------------------------
@@ -167,13 +213,14 @@ class AkashiCore:
     # -- self-correction -------------------------------------------------
 
     def _retry_loop(self, task_results: list[TaskResult]) -> bool:
-        for attempt in range(1, MAX_RETRIES + 1):
+        max_retries = settings.PLANNER_MAX_RETRIES
+        for attempt in range(1, max_retries + 1):
             failed_steps = [r for r in task_results if not r.success and not r.skipped]
             if not failed_steps:
                 return False
 
             self._print(
-                f"[Correction] Attempt {attempt}/{MAX_RETRIES} — asking LLM for a corrected plan..."
+                f"[Correction] Attempt {attempt}/{max_retries} — asking LLM for a corrected plan..."
             )
             correction_prompt = self._build_correction_prompt(task_results)
 
@@ -197,7 +244,7 @@ class AkashiCore:
             task_results.clear()
             task_results.extend(self._execute_plan(plan))
 
-            if attempt == MAX_RETRIES:
+            if attempt == max_retries:
                 if any(not r.success and not r.skipped for r in task_results):
                     return True
         return False
@@ -216,7 +263,43 @@ class AkashiCore:
             if r.stderr.strip():
                 masked, _ = self.guard.mask(r.stderr.strip()[:200])
                 lines.append(f"    stderr: {masked!r}")
+            # For failed MCP calls, surface the schema of the specific tool —
+            # the system prompt has the full catalog, but pinpointing the
+            # offending tool's schema accelerates correction (especially for
+            # arg-name / arg-type mistakes).
+            if (
+                not r.success
+                and r.task.action == ActionTypeEnum.MCP_CALL
+                and self.mcp_manager is not None
+                and self.mcp_manager.connected
+            ):
+                schema_hint = self._format_tool_schema_hint(r.task.name)
+                if schema_hint:
+                    lines.append(f"    expected for '{r.task.name}': {schema_hint}")
         return "\n".join(lines)
+
+    def _format_tool_schema_hint(self, tool_name: str) -> str:
+        try:
+            tools = self.mcp_manager.list_tools()
+        except Exception:
+            return ""
+        for t in tools:
+            if t.get("name") != tool_name:
+                continue
+            schema = t.get("input_schema") or {}
+            props = (schema.get("properties") if isinstance(schema, dict) else {}) or {}
+            required = set(
+                (schema.get("required") if isinstance(schema, dict) else []) or []
+            )
+            if not props:
+                return "no args"
+            arg_specs: list[str] = []
+            for k, spec in props.items():
+                ptype = (spec or {}).get("type") if isinstance(spec, dict) else None
+                marker = "*" if k in required else ""
+                arg_specs.append(f"{k}{marker}: {ptype or 'any'}")
+            return "(" + ", ".join(arg_specs) + ")"
+        return ""
 
     # -- summarization ---------------------------------------------------
 
@@ -302,3 +385,8 @@ def _load_auto_approved() -> set[str]:
 def _is_history_malformed_error(err: Exception) -> bool:
     msg = str(err).lower()
     return "function response" in msg or "function call" in msg
+
+
+def _is_event_loop_bound_error(err: Exception) -> bool:
+    msg = str(err).lower()
+    return "bound to a different event loop" in msg or "different event loop" in msg

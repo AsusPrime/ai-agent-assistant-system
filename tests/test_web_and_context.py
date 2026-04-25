@@ -12,7 +12,6 @@ import os
 import sys
 from unittest.mock import MagicMock, patch
 
-import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
@@ -65,9 +64,7 @@ def test_web_search_handles_provider_exception():
 
     with patch.object(web_handlers, "DDGS") as ddgs_cls:
         ddgs_cls.return_value.text.side_effect = RuntimeError("boom")
-        task = Task(
-            action=ActionTypeEnum.WEB_SEARCH, name="x", params={"query": "x"}
-        )
+        task = Task(action=ActionTypeEnum.WEB_SEARCH, name="x", params={"query": "x"})
         result = web_handlers.web_search(task=task, session=SessionState())
 
     assert result.returncode == 1
@@ -104,9 +101,7 @@ def test_web_read_extracts_main_text():
 def test_web_read_rejects_invalid_scheme():
     from tools.web_handlers import web_read
 
-    task = Task(
-        action=ActionTypeEnum.WEB_READ, name="bad", params={"url": "ftp://x"}
-    )
+    task = Task(action=ActionTypeEnum.WEB_READ, name="bad", params={"url": "ftp://x"})
     result = web_read(task=task, session=SessionState())
     assert result.returncode == 1
     assert "scheme" in result.stderr
@@ -230,12 +225,17 @@ def test_second_query_receives_prior_message_history(tmp_path):
     message_history kwarg.
     """
     os.environ["DATA_DIR"] = str(tmp_path)
+    # Point MCP config to a nonexistent path so AkashiCore does not try to
+    # start any real MCP servers during the test.
+    os.environ["MCP_CONFIG_PATH"] = str(tmp_path / "no-mcp.json")
     # Re-import settings so DATA_DIR is picked up fresh
     from importlib import reload
 
     import config
+
     reload(config)
     from core import akashi
+
     reload(akashi)
 
     plan_search = Plan(
@@ -254,7 +254,9 @@ def test_second_query_receives_prior_message_history(tmp_path):
     turn1_msgs = ["MSG_FROM_TURN_1"]
     turn2_msgs = turn1_msgs + ["MSG_FROM_TURN_2"]
 
-    fake_search_result = [{"title": "Kyiv weather", "href": "https://w.test", "body": "12C cloudy"}]
+    fake_search_result = [
+        {"title": "Kyiv weather", "href": "https://w.test", "body": "12C cloudy"}
+    ]
 
     with (
         patch("core.akashi.planner_agent") as planner,
@@ -268,9 +270,7 @@ def test_second_query_receives_prior_message_history(tmp_path):
         summary.run_sync.return_value = MagicMock(output="done")
         ddgs_cls.return_value.text.return_value = fake_search_result
 
-        core = akashi.AkashiCore(
-            confirm_fn=lambda _m: True, on_message=lambda _m: None
-        )
+        core = akashi.AkashiCore(confirm_fn=lambda _m: True, on_message=lambda _m: None)
         # both queries
         r1 = core.process_query("what is the weather in Kyiv?")
         r2 = core.process_query("what was the result?")

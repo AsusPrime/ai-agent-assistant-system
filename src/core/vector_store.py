@@ -10,9 +10,6 @@ if TYPE_CHECKING:
     from chromadb import Collection
 
 _SUPPORTED_EXTENSIONS = {".txt", ".md", ".py", ".rst", ".json", ".csv"}
-_MAX_FILE_BYTES = 512 * 1024  # 512 KB
-_CHUNK_SIZE = 500
-_CHUNK_OVERLAP = 50
 
 
 class _GeminiEmbeddingFunction(chromadb.EmbeddingFunction):
@@ -31,8 +28,14 @@ class _GeminiEmbeddingFunction(chromadb.EmbeddingFunction):
 
 
 def _chunk_text(
-    text: str, chunk_size: int = _CHUNK_SIZE, overlap: int = _CHUNK_OVERLAP
+    text: str,
+    chunk_size: int | None = None,
+    overlap: int | None = None,
 ) -> list[str]:
+    if chunk_size is None:
+        chunk_size = settings.KB_CHUNK_SIZE
+    if overlap is None:
+        overlap = settings.KB_CHUNK_OVERLAP
     paragraphs = [p.strip() for p in text.split("\n\n") if p.strip()]
     chunks: list[str] = []
     current = ""
@@ -67,15 +70,18 @@ class VectorStore:
             embedding_function=_GeminiEmbeddingFunction(),
         )
 
-    def index_file(self, path: str, chunk_size: int = _CHUNK_SIZE) -> int:
+    def index_file(self, path: str, chunk_size: int | None = None) -> int:
+        if chunk_size is None:
+            chunk_size = settings.KB_CHUNK_SIZE
+        max_bytes = settings.KB_MAX_FILE_BYTES
         path = os.path.expanduser(path)
         if not os.path.isfile(path):
             raise FileNotFoundError(path)
         ext = os.path.splitext(path)[1].lower()
         if ext not in _SUPPORTED_EXTENSIONS:
             raise ValueError(f"Unsupported file type: {ext}")
-        if os.path.getsize(path) > _MAX_FILE_BYTES:
-            raise ValueError(f"File too large (>{_MAX_FILE_BYTES // 1024}KB): {path}")
+        if os.path.getsize(path) > max_bytes:
+            raise ValueError(f"File too large (>{max_bytes // 1024}KB): {path}")
         with open(path, encoding="utf-8", errors="replace") as f:
             text = f.read()
         chunks = _chunk_text(text, chunk_size=chunk_size)
@@ -96,7 +102,7 @@ class VectorStore:
                 ext = os.path.splitext(fname)[1].lower()
                 if ext not in _SUPPORTED_EXTENSIONS:
                     continue
-                if os.path.getsize(fpath) > _MAX_FILE_BYTES:
+                if os.path.getsize(fpath) > settings.KB_MAX_FILE_BYTES:
                     continue
                 try:
                     report[fpath] = self.index_file(fpath)

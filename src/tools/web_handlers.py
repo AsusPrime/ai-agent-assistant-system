@@ -39,7 +39,9 @@ def web_search(task: Task, session: SessionState) -> TaskResult:
         for r in results
     ]
     return TaskResult(
-        task=task, stdout=json.dumps(trimmed, ensure_ascii=False, indent=2), returncode=0
+        task=task,
+        stdout=json.dumps(trimmed, ensure_ascii=False, indent=2),
+        returncode=0,
     )
 
 
@@ -63,9 +65,7 @@ def web_read(task: Task, session: SessionState) -> TaskResult:
 
     text = trafilatura.extract(resp.text, url=url) or ""
     if not text:
-        return TaskResult(
-            task=task, stderr="no extractable content", returncode=1
-        )
+        return TaskResult(task=task, stderr="no extractable content", returncode=1)
     if len(text) > settings.WEB_MAX_TEXT_LEN:
         text = text[: settings.WEB_MAX_TEXT_LEN] + "\n... [truncated]"
     return TaskResult(task=task, stdout=text, returncode=0)

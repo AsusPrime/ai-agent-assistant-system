@@ -54,28 +54,33 @@ class MessageRepository:
             turn = ModelMessagesTypeAdapter.validate_json(blob)
             all_messages.extend(turn)
 
-        # pydantic-ai requires history to start with a ModelRequest (kind="request")
-        while all_messages and getattr(all_messages[0], "kind", None) != "request":
+        # History must START with a ModelRequest that contains a user-prompt —
+        # not a tool-return. Trimming to recent turns can leave the list starting
+        # with a tool-return (kind="request") whose paired tool-call was dropped,
+        # which Gemini rejects as "function response without preceding function call".
+        while all_messages:
+            m = all_messages[0]
+            if getattr(m, "kind", None) != "request":
+                all_messages.pop(0)
+                continue
+            parts = getattr(m, "parts", [])
+            if any(getattr(p, "part_kind", None) == "user-prompt" for p in parts):
+                break
             all_messages.pop(0)
 
-        # Gemini requires that every function-call is immediately followed by
-        # a function-response. If the history was trimmed mid-turn, drop the
-        # trailing messages that would violate this constraint.
-        cleaned: list = []
-        for msg in all_messages:
-            cleaned.append(msg)
-        # Remove trailing response that contains tool calls without a following request
-        # with tool results — walk backwards and drop incomplete pairs.
-        while cleaned:
-            last = cleaned[-1]
+        # Similarly, the tail must not END with an unpaired tool-call —
+        # walk back and drop trailing responses that contain tool-call parts
+        # without a following request with tool-return.
+        while all_messages:
+            last = all_messages[-1]
             if getattr(last, "kind", None) == "response":
                 parts = getattr(last, "parts", [])
                 has_tool_call = any(
                     getattr(p, "part_kind", None) == "tool-call" for p in parts
                 )
                 if has_tool_call:
-                    cleaned.pop()
+                    all_messages.pop()
                     continue
             break
 
-        return cleaned
+        return all_messages

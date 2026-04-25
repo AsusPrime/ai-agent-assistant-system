@@ -55,7 +55,9 @@ def http_request(task: Task, session: SessionState) -> TaskResult:
 
     raw_timeout = task.params.get("timeout", settings.HTTP_TIMEOUT)
     try:
-        timeout = float(raw_timeout) if raw_timeout is not None else settings.HTTP_TIMEOUT
+        timeout = (
+            float(raw_timeout) if raw_timeout is not None else settings.HTTP_TIMEOUT
+        )
     except (TypeError, ValueError):
         timeout = settings.HTTP_TIMEOUT
 

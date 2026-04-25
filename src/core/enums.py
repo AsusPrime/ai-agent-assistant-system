@@ -13,3 +13,4 @@ class ActionTypeEnum(str, Enum):
     WEB_SEARCH = "web_search"
     WEB_READ = "web_read"
     HTTP_REQUEST = "http_request"
+    MCP_CALL = "mcp_call"
