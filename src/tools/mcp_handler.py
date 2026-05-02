@@ -50,6 +50,14 @@ def _looks_like_error_in_text(text: str) -> bool:
     return bool(_ERROR_LINE_RE.match(first))
 
 
+def _forced_args_for(tool: str, default_args: dict[str, dict]) -> dict[str, Any]:
+    matches = [s for s in default_args if tool.startswith(f"{s}_")]
+    if not matches:
+        return {}
+    server = max(matches, key=len)
+    return default_args[server]
+
+
 def mcp_call(task: Task, session: SessionState) -> TaskResult:
     manager = session.mcp_manager
     if manager is None or not manager.connected:
@@ -92,6 +100,9 @@ def mcp_call(task: Task, session: SessionState) -> TaskResult:
             returncode=1,
         )
 
+    forced = _forced_args_for(tool, manager.config.default_args)
+    final_args = {**args, **forced}
+
     if not manager.is_auto_approved(tool):
         confirm = session.confirm_fn
         if confirm is None:
@@ -100,14 +111,16 @@ def mcp_call(task: Task, session: SessionState) -> TaskResult:
                 stderr=f"MCP tool '{tool}' requires HITL but no confirm_fn is set",
                 returncode=1,
             )
-        prompt = f"  MCP call requires approval: {tool} | args={args}. Execute? [y/N]: "
+        prompt = (
+            f"  MCP call requires approval: {tool} | args={final_args}. Execute? [y/N]: "
+        )
         if not confirm(prompt):
             return TaskResult(
                 task=task, stderr="cancelled by user", skipped=True, returncode=1
             )
 
     try:
-        result = manager.call_tool(tool, args)
+        result = manager.call_tool(tool, final_args)
     except Exception as e:
         return TaskResult(task=task, stderr=f"MCP call failed: {e}", returncode=1)
 
