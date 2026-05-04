@@ -1,11 +1,8 @@
-import json
-import time
-from pathlib import Path
 from typing import Callable
 
 from config import settings
 from core.enums import ActionTypeEnum
-from core.executor import Executor
+from core.engine import ExecutionEngine
 from core.memory import MessageRepository
 from core.planner import build_planner_agent, format_mcp_tools_section, planner_agent
 from core.privacy import PrivacyGuard
@@ -14,8 +11,6 @@ from core.session import SessionState
 from core.summarizer import summary_agent
 from integrations.mcp_client import MCPManager
 from integrations.mcp_config import load_config as load_mcp_config
-
-_WHITELIST_PATH = Path(__file__).resolve().parent.parent / "tools" / "whitelist.json"
 
 ConfirmFn = Callable[[str], bool]
 MessageFn = Callable[[str], None]
@@ -44,12 +39,16 @@ class AkashiCore:
         on_message: MessageFn | None = None,
         mcp_manager: MCPManager | None = None,
     ):
-        self.executor = Executor()
         self.guard = PrivacyGuard()
         self.msg_repo = MessageRepository(data_dir=settings.DATA_DIR)
         self.session = SessionState()
         self._confirm = confirm_fn or self._default_confirm
         self._print = on_message or print
+        self.engine = ExecutionEngine(
+            session=self.session,
+            confirm_fn=self._confirm,
+            on_message=self._print,
+        )
 
         if mcp_manager is None:
             cfg = load_mcp_config(settings.MCP_CONFIG_PATH)
@@ -166,49 +165,13 @@ class AkashiCore:
     # -- execution -------------------------------------------------------
 
     def _execute_plan(self, plan: Plan) -> list[TaskResult]:
-        results: list[TaskResult] = []
-        auto_cmds = _load_auto_approved()
-        failed = False
-
-        for i, task in enumerate(plan.tasks, 1):
-            if failed:
-                results.append(TaskResult(task=task, skipped=True))
-                continue
-
-            needs_confirm = (
-                task.action == ActionTypeEnum.RUN_COMMAND and task.name not in auto_cmds
-            )
-            if needs_confirm:
-                msg = f"  Дія №{i} потребує дозволу: {task.action.value} | {task.name} | {task.params}. Виконати? [y/N]: "
-                if not self._confirm(msg):
-                    self._print("Cancelled.")
-                    results.append(TaskResult(task=task, skipped=True))
-                    failed = True
-                    continue
-
-            t0 = time.monotonic()
-            result = self.executor.execute(task, self.session)
-            result.duration_ms = int((time.monotonic() - t0) * 1000)
-            results.append(result)
-
-            if result.stdout:
-                self._print(
-                    result.stdout
-                    if result.stdout.endswith("\n")
-                    else result.stdout + "\n"
-                )
-            if result.stderr:
-                self._print(f"[stderr] {result.stderr}")
-            if not result.success:
-                self._print(
-                    f"[Error] Step '{task.name}' failed (rc={result.returncode}). Stopping."
-                )
-                failed = True
-
-        self.session.execution_log.extend(results)
+        results = self.engine.run(plan)
         if settings.DEBUG:
             self._print_execution_log(results)
         return results
+
+    def execute_plan(self, plan: Plan) -> list[TaskResult]:
+        return self._execute_plan(plan)
 
     # -- self-correction -------------------------------------------------
 
@@ -374,12 +337,6 @@ def _unmask_plan(plan: Plan, mapping: dict[str, str]) -> Plan:
             task.model_copy(update={"name": unmasked_name, "params": unmasked_params})
         )
     return plan.model_copy(update={"tasks": unmasked_tasks})
-
-
-def _load_auto_approved() -> set[str]:
-    with open(_WHITELIST_PATH) as f:
-        wl = json.load(f)
-    return set(wl.get("allowed_commands", []))
 
 
 def _is_history_malformed_error(err: Exception) -> bool:

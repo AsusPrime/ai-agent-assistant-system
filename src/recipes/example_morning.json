@@ -1,0 +1,27 @@
+{
+  "tasks": [
+    {
+      "action": "open_app",
+      "name": "discord",
+      "params": {}
+    },
+    {
+      "action": "open_app",
+      "name": "safari",
+      "params": {}
+    }
+  ],
+  "requirements": [
+    {
+      "type": "app",
+      "name": "discord",
+      "description": "Discord messenger"
+    },
+    {
+      "type": "command",
+      "name": "open",
+      "description": "macOS open command"
+    }
+  ],
+  "reasoning": "Morning routine: open communication and browser"
+}

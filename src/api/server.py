@@ -6,15 +6,23 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.concurrency import run_in_threadpool
 
 from api.schemas import (
+    ExecuteResponse,
     HistoryResponse,
     HistoryTurn,
+    PlanRequest,
     QueryRequest,
     QueryResponse,
+    RecipeListResponse,
+    RecipeRunRequest,
+    RecipeSaveRequest,
     StatusResponse,
     TaskExecution,
 )
 from config import settings
 from core.akashi import AkashiCore
+from core.recipe_loader import Recipe, list_recipes, load_recipe, save_recipe
+from core.requirements import check_requirements
+from core.schemas import Plan, Task
 
 
 def _build_core() -> tuple[AkashiCore, list[str]]:
@@ -117,6 +125,97 @@ async def history(request: Request, limit: int = 10) -> HistoryResponse:
             parts = []
         turns.append(HistoryTurn(turn_index=turn_index, parts=parts))
     return HistoryResponse(turns=turns)
+
+
+@app.post("/execute", response_model=ExecuteResponse)
+async def execute_plan(req: PlanRequest, request: Request) -> ExecuteResponse:
+    core = _get_core(request)
+    buf: list[str] = request.app.state.messages_buffer
+    buf.clear()
+
+    plan = Plan(
+        tasks=[Task(action=t.action, name=t.name, params=t.params) for t in req.tasks],
+        reasoning=req.reasoning,
+    )
+
+    try:
+        results = await run_in_threadpool(core.execute_plan, plan)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"execution failed: {e}")
+
+    tasks = [
+        TaskExecution(
+            action=r.task.action.value,
+            name=r.task.name,
+            status=r.status,
+            stdout=r.stdout,
+            stderr=r.stderr,
+            duration_ms=r.duration_ms,
+        )
+        for r in results
+    ]
+    return ExecuteResponse(tasks=tasks, messages=list(buf))
+
+
+@app.get("/recipes", response_model=RecipeListResponse)
+async def get_recipes() -> RecipeListResponse:
+    return RecipeListResponse(recipes=list_recipes())
+
+
+@app.post("/recipes", status_code=201)
+async def create_recipe(req: RecipeSaveRequest) -> dict:
+    from core.requirements import Requirement
+
+    recipe = Recipe(
+        tasks=[Task(action=t.action, name=t.name, params=t.params) for t in req.tasks],
+        reasoning=req.reasoning,
+        requirements=[Requirement(**r.model_dump()) for r in req.requirements],
+    )
+    path = save_recipe(req.name, recipe)
+    return {"name": req.name, "path": str(path)}
+
+
+@app.post("/recipes/{name}/run", response_model=ExecuteResponse)
+async def run_recipe(
+    name: str, request: Request, body: RecipeRunRequest | None = None
+) -> ExecuteResponse:
+    import os
+
+    core = _get_core(request)
+    buf: list[str] = request.app.state.messages_buffer
+    buf.clear()
+
+    try:
+        recipe = load_recipe(name)
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail=f"Recipe '{name}' not found")
+
+    provided_vars = (body.variables if body else None) or {}
+    for key, value in provided_vars.items():
+        os.environ[key] = value
+
+    if recipe.requirements:
+        preflight = check_requirements(recipe.requirements)
+        if not preflight.passed:
+            raise HTTPException(status_code=422, detail=preflight.summary)
+
+    try:
+        results = await run_in_threadpool(core.execute_plan, recipe.to_plan())
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"recipe execution failed: {e}")
+
+    tasks = [
+        TaskExecution(
+            action=r.task.action.value,
+            name=r.task.name,
+            status=r.status,
+            stdout=r.stdout,
+            stderr=r.stderr,
+            duration_ms=r.duration_ms,
+        )
+        for r in results
+    ]
+    return ExecuteResponse(tasks=tasks, messages=list(buf))
 
 
 @app.get("/health")

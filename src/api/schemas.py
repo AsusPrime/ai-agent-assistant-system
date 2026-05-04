@@ -36,3 +36,47 @@ class HistoryTurn(BaseModel):
 
 class HistoryResponse(BaseModel):
     turns: list[HistoryTurn]
+
+
+# --- Engine (direct plan execution) ---
+
+
+class TaskInput(BaseModel):
+    action: str
+    name: str
+    params: dict[str, str | list[str] | None] = {}
+
+
+class PlanRequest(BaseModel):
+    tasks: list[TaskInput]
+    reasoning: str = ""
+
+
+class ExecuteResponse(BaseModel):
+    tasks: list[TaskExecution] = []
+    messages: list[str] = []
+
+
+# --- Recipes ---
+
+
+class RecipeListResponse(BaseModel):
+    recipes: list[str]
+
+
+class RequirementInput(BaseModel):
+    type: str
+    name: str
+    description: str = ""
+    optional: bool = False
+
+
+class RecipeSaveRequest(BaseModel):
+    name: str = Field(min_length=1, max_length=100)
+    tasks: list[TaskInput]
+    reasoning: str = ""
+    requirements: list[RequirementInput] = []
+
+
+class RecipeRunRequest(BaseModel):
+    variables: dict[str, str] = {}
