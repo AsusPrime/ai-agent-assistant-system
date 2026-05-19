@@ -19,6 +19,8 @@ from api.schemas import (
     RecipeListResponse,
     RecipeRunRequest,
     RecipeSaveRequest,
+    SettingsResponse,
+    SettingsUpdateRequest,
     StatusResponse,
     StepRequest,
     StepResponse,
@@ -312,6 +314,24 @@ async def run_recipe(
         for r in results
     ]
     return ExecuteResponse(tasks=tasks, messages=list(buf))
+
+
+_SETTINGS_FIELDS = [
+    f.alias or name for name, f in SettingsUpdateRequest.model_fields.items()
+]
+
+
+@app.get("/settings", response_model=SettingsResponse)
+async def get_settings() -> SettingsResponse:
+    return SettingsResponse(**{k: getattr(settings, k) for k in _SETTINGS_FIELDS})
+
+
+@app.patch("/settings", response_model=SettingsResponse)
+async def update_settings(req: SettingsUpdateRequest) -> SettingsResponse:
+    updates = req.model_dump(exclude_none=True)
+    for key, value in updates.items():
+        setattr(settings, key, value)
+    return SettingsResponse(**{k: getattr(settings, k) for k in _SETTINGS_FIELDS})
 
 
 @app.get("/health")

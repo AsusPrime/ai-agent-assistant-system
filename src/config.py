@@ -41,5 +41,11 @@ class Settings(BaseSettings):
     KB_CHUNK_SIZE: int = 500
     KB_CHUNK_OVERLAP: int = 50
 
+    UI_TAMAGOTCHI: bool = True
+    UI_AUTO_APPROVE: bool = False
+    UI_MAX_VISIBLE_TASKS: int = 5
+    UI_SUMMARY_DELAY_MS: int = 1500
+    UI_LANGUAGE: str = "uk"
+
 
 settings = Settings()

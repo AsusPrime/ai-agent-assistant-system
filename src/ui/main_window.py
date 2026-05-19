@@ -8,6 +8,7 @@ from PySide6.QtWidgets import (
     QGraphicsDropShadowEffect,
     QHBoxLayout,
     QLabel,
+    QPushButton,
     QSizePolicy,
     QVBoxLayout,
     QWidget,
@@ -16,6 +17,7 @@ from PySide6.QtWidgets import (
 from ui.api_client import AkashiApiClient, SingleExecResult, StepResult
 from ui.emotions import Emotion, get_time_of_day, TimeOfDay
 from ui.input_bar import InputBar
+from ui.settings_panel import SettingsWindow
 from ui.status_card import StatusPanel
 from ui.tamagotchi import TamagotchiWidget
 from ui.weather import WeatherState, fetch_weather
@@ -50,9 +52,15 @@ class FloatingBar(QWidget):
         self._current_task: dict | None = None
         self._completed_cards: list[dict] = []
 
+        self._ui_tamagotchi = True
+        self._ui_auto_approve = False
+        self._ui_max_visible = 5
+        self._ui_summary_delay = 1500
+
         self._setup_window()
         self._build_ui()
         self._connect_signals()
+        self._load_ui_settings()
         self._init_context()
         self._greet()
 
@@ -70,6 +78,13 @@ class FloatingBar(QWidget):
         super().showEvent(event)
         self._pin_on_top()
         self.setFixedWidth(self._WIDTH)
+        QTimer.singleShot(0, self._reposition_settings_btn)
+
+    def _reposition_settings_btn(self) -> None:
+        cw = self._container.width()
+        bw = self._settings_btn.width()
+        self._settings_btn.move(cw - bw - 6, 4)
+        self._settings_btn.raise_()
 
     def _build_ui(self) -> None:
         self.setFixedWidth(self._WIDTH)
@@ -101,6 +116,19 @@ class FloatingBar(QWidget):
         main_layout.setContentsMargins(10, 8, 10, 8)
         main_layout.setSpacing(6)
 
+        self._settings_btn = QPushButton("⚙")
+        self._settings_btn.setFont(QFont(FONT_FAMILY, 14))
+        self._settings_btn.setFixedSize(24, 24)
+        self._settings_btn.setStyleSheet("""
+            QPushButton {
+                background: transparent; color: #555; border: none;
+            }
+            QPushButton:hover { color: #06d6a0; }
+        """)
+        self._settings_btn.setToolTip("Settings")
+        self._settings_btn.setParent(self._container)
+        self._settings_btn.raise_()
+
         top_row = QHBoxLayout()
         top_row.setSpacing(8)
 
@@ -130,6 +158,8 @@ class FloatingBar(QWidget):
         self._status_panel.hide()
         main_layout.addWidget(self._status_panel)
 
+        self._settings_window = SettingsWindow()
+
         self._api = AkashiApiClient()
 
         self._health_timer = QTimer(self)
@@ -143,6 +173,33 @@ class FloatingBar(QWidget):
         self._api.exec_single_finished.connect(self._on_exec_single_finished)
         self._status_panel.approved.connect(self._on_approve)
         self._status_panel.denied.connect(self._on_deny)
+        self._settings_btn.clicked.connect(self._toggle_settings)
+        self._settings_window.settings_changed.connect(self._apply_settings)
+
+    def _load_ui_settings(self) -> None:
+        try:
+            import httpx
+
+            with httpx.Client(timeout=3.0) as c:
+                resp = c.get("http://127.0.0.1:8000/settings")
+                if resp.status_code == 200:
+                    self._apply_settings(resp.json())
+        except Exception:
+            pass
+
+    def _toggle_settings(self) -> None:
+        if self._settings_window.isVisible():
+            self._settings_window.hide()
+        else:
+            self._settings_window.load_and_show(self.pos())
+
+    def _apply_settings(self, data: dict) -> None:
+        self._ui_tamagotchi = data.get("UI_TAMAGOTCHI", True)
+        self._ui_auto_approve = data.get("UI_AUTO_APPROVE", False)
+        self._ui_max_visible = data.get("UI_MAX_VISIBLE_TASKS", 5)
+        self._ui_summary_delay = data.get("UI_SUMMARY_DELAY_MS", 1500)
+        self._tamagotchi.setVisible(self._ui_tamagotchi)
+        self._adjust_height()
 
     def _init_context(self) -> None:
         tod = get_time_of_day()
@@ -154,7 +211,8 @@ class FloatingBar(QWidget):
             self._tamagotchi.set_weather(weather.value)
 
     def _greet(self) -> None:
-        self._tamagotchi.set_emotion(Emotion.GREETING)
+        if self._ui_tamagotchi:
+            self._tamagotchi.set_emotion(Emotion.GREETING)
 
     # -- ReAct flow --
 
@@ -165,10 +223,12 @@ class FloatingBar(QWidget):
         self._current_task = None
         self._completed_cards = []
 
+        self._settings_window.hide()
         self._status_panel.clear()
         self._status_panel.show()
         self._separator.show()
-        self._tamagotchi.set_emotion(Emotion.THINKING)
+        if self._ui_tamagotchi:
+            self._tamagotchi.set_emotion(Emotion.THINKING)
 
         self._api.send_step(text, [])
         self._adjust_height()
@@ -178,7 +238,8 @@ class FloatingBar(QWidget):
             self._input.set_busy(False)
             self._tamagotchi.set_emotion(Emotion.SAD)
             self._status_panel.set_tasks(
-                self._completed_cards + [{"name": result.error, "status": "error"}]
+                self._completed_cards + [{"name": result.error, "status": "error"}],
+                self._ui_max_visible,
             )
             self._adjust_height()
             QTimer.singleShot(5000, lambda: self._tamagotchi.set_emotion(Emotion.IDLE))
@@ -206,17 +267,28 @@ class FloatingBar(QWidget):
                     self._tamagotchi.set_emotion(Emotion.HAPPY)
                 self._adjust_height()
 
-            self._status_panel.set_tasks(self._completed_cards)
+            self._status_panel.set_tasks(self._completed_cards, self._ui_max_visible)
             self._adjust_height()
-            QTimer.singleShot(1500, _show_summary)
+            QTimer.singleShot(self._ui_summary_delay, _show_summary)
             return
 
         if result.task:
             self._current_task = result.task
-            pending_card = {"name": result.task["name"], "status": "pending"}
-            self._status_panel.set_tasks(self._completed_cards + [pending_card])
-            self._status_panel.show_approve_buttons(True)
-            self._adjust_height()
+            if self._ui_auto_approve:
+                running_card = {"name": result.task["name"], "status": "running"}
+                self._status_panel.set_tasks(
+                    self._completed_cards + [running_card], self._ui_max_visible
+                )
+                self._tamagotchi.set_emotion(Emotion.THINKING)
+                self._api.send_exec_single(result.task)
+                self._adjust_height()
+            else:
+                pending_card = {"name": result.task["name"], "status": "pending"}
+                self._status_panel.set_tasks(
+                    self._completed_cards + [pending_card], self._ui_max_visible
+                )
+                self._status_panel.show_approve_buttons(True)
+                self._adjust_height()
 
     def _on_approve(self) -> None:
         self._status_panel.show_approve_buttons(False)
@@ -224,7 +296,9 @@ class FloatingBar(QWidget):
             return
 
         running_card = {"name": self._current_task["name"], "status": "running"}
-        self._status_panel.set_tasks(self._completed_cards + [running_card])
+        self._status_panel.set_tasks(
+            self._completed_cards + [running_card], self._ui_max_visible
+        )
         self._tamagotchi.set_emotion(Emotion.THINKING)
         self._api.send_exec_single(self._current_task)
         self._adjust_height()
@@ -247,14 +321,14 @@ class FloatingBar(QWidget):
             )
 
         self._current_task = None
-        self._status_panel.set_tasks(self._completed_cards)
+        self._status_panel.set_tasks(self._completed_cards, self._ui_max_visible)
         self._tamagotchi.set_emotion(Emotion.IDLE)
         self._adjust_height()
 
     def _on_exec_single_finished(self, result: SingleExecResult) -> None:
         if result.error:
             self._completed_cards.append({"name": result.error, "status": "error"})
-            self._status_panel.set_tasks(self._completed_cards)
+            self._status_panel.set_tasks(self._completed_cards, self._ui_max_visible)
             self._input.set_busy(False)
             self._tamagotchi.set_emotion(Emotion.SAD)
             self._adjust_height()
@@ -280,7 +354,9 @@ class FloatingBar(QWidget):
         self._current_task = None
 
         thinking_card = {"name": "Thinking about next step…", "status": "running"}
-        self._status_panel.set_tasks(self._completed_cards + [thinking_card])
+        self._status_panel.set_tasks(
+            self._completed_cards + [thinking_card], self._ui_max_visible
+        )
         self._adjust_height()
 
         self._tamagotchi.set_emotion(Emotion.THINKING)
@@ -316,6 +392,7 @@ class FloatingBar(QWidget):
         self._container.adjustSize()
         h = self._container.sizeHint().height() + 16
         self.setFixedHeight(max(h, 96))
+        self._reposition_settings_btn()
 
     def _pin_on_top(self) -> None:
         import platform

@@ -138,3 +138,40 @@ class RecipeSaveRequest(BaseModel):
 
 class RecipeRunRequest(BaseModel):
     variables: dict[str, str] = {}
+
+
+# --- Settings ---
+
+
+class SettingsResponse(BaseModel):
+    LLM_PROVIDER: str
+    MODEL_NAME: str
+    DEBUG: bool
+    API_AUTO_APPROVE: bool
+    REACT_MAX_ITERATIONS: int
+    MEMORY_TURNS: int
+    WEB_TIMEOUT: float
+    HTTP_TIMEOUT: float
+    MCP_CALL_TIMEOUT: float
+    UI_TAMAGOTCHI: bool
+    UI_AUTO_APPROVE: bool
+    UI_MAX_VISIBLE_TASKS: int
+    UI_SUMMARY_DELAY_MS: int
+    UI_LANGUAGE: str
+
+
+class SettingsUpdateRequest(BaseModel):
+    LLM_PROVIDER: str | None = None
+    MODEL_NAME: str | None = None
+    DEBUG: bool | None = None
+    API_AUTO_APPROVE: bool | None = None
+    REACT_MAX_ITERATIONS: int | None = None
+    MEMORY_TURNS: int | None = None
+    WEB_TIMEOUT: float | None = None
+    HTTP_TIMEOUT: float | None = None
+    MCP_CALL_TIMEOUT: float | None = None
+    UI_TAMAGOTCHI: bool | None = None
+    UI_AUTO_APPROVE: bool | None = None
+    UI_MAX_VISIBLE_TASKS: int | None = None
+    UI_SUMMARY_DELAY_MS: int | None = None
+    UI_LANGUAGE: str | None = None
