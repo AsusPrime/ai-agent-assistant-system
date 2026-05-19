@@ -23,5 +23,17 @@ def get_model() -> Model:
             settings.MODEL_NAME,
             provider=OpenAIProvider(base_url=settings.LLM_BASE_URL, api_key="ollama"),
         )
+    elif settings.LLM_PROVIDER == "anthropic":
+        if not settings.API_KEY or not settings.API_KEY.strip():
+            raise ValueError(
+                "Anthropic provider requires an API key. Set API_KEY in your .env file."
+            )
+        from pydantic_ai.models.anthropic import AnthropicModel
+        from pydantic_ai.providers.anthropic import AnthropicProvider
+
+        return AnthropicModel(
+            settings.MODEL_NAME,
+            provider=AnthropicProvider(api_key=settings.API_KEY),
+        )
     else:
         raise ValueError(f"Unknown LLM_PROVIDER: {settings.LLM_PROVIDER}")

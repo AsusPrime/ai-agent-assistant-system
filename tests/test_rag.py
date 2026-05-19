@@ -14,7 +14,6 @@ from core.schemas import Task
 from core.enums import ActionTypeEnum
 from core.session import SessionState
 
-
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------

@@ -99,6 +99,8 @@ packaging==25.0
 pathable==0.5.0
 platformdirs==4.9.2
 primp==1.2.2
+PySide6==6.11.0
+pyinstaller==6.20.0
 prompt_toolkit==3.0.52
 propcache==0.4.1
 proto-plus==1.27.1

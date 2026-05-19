@@ -14,8 +14,7 @@ class MessageRepository:
 
     def _init_db(self) -> None:
         with sqlite3.connect(self._db_path) as conn:
-            conn.execute(
-                """
+            conn.execute("""
                 CREATE TABLE IF NOT EXISTS messages (
                     id          INTEGER PRIMARY KEY AUTOINCREMENT,
                     session_id  TEXT    NOT NULL,
@@ -23,8 +22,7 @@ class MessageRepository:
                     turn_index  INTEGER NOT NULL,
                     ts          REAL    NOT NULL
                 )
-            """
-            )
+            """)
             conn.commit()
 
     def save_turn(self, session_id: str, messages: list) -> None:

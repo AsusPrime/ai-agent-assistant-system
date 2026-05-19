@@ -3,7 +3,6 @@ import time
 from pathlib import Path
 from typing import Callable
 
-from config import settings
 from core.enums import ActionTypeEnum
 from core.executor import Executor
 from core.schemas import Plan, Task, TaskResult
@@ -27,7 +26,7 @@ class ExecutionEngine:
         self._confirm = confirm_fn or (lambda _: True)
         self._print = on_message or print
 
-    def run(self, plan: Plan) -> list[TaskResult]:
+    def run(self, plan: Plan, pre_approved: bool = False) -> list[TaskResult]:
         results: list[TaskResult] = []
         auto_cmds = _load_auto_approved()
         failed = False
@@ -38,7 +37,8 @@ class ExecutionEngine:
                 continue
 
             needs_confirm = (
-                task.action == ActionTypeEnum.RUN_COMMAND
+                not pre_approved
+                and task.action == ActionTypeEnum.RUN_COMMAND
                 and task.name not in auto_cmds
             )
             if needs_confirm:
@@ -73,6 +73,41 @@ class ExecutionEngine:
 
         self.session.execution_log.extend(results)
         return results
+
+    def run_single(self, task: Task, pre_approved: bool = False) -> TaskResult:
+        auto_cmds = _load_auto_approved()
+
+        needs_confirm = (
+            not pre_approved
+            and task.action == ActionTypeEnum.RUN_COMMAND
+            and task.name not in auto_cmds
+        )
+        if needs_confirm:
+            msg = (
+                f"  Дія потребує дозволу: {task.action.value} "
+                f"| {task.name} | {task.params}. Виконати? [y/N]: "
+            )
+            if not self._confirm(msg):
+                self._print("Cancelled.")
+                result = TaskResult(task=task, skipped=True)
+                self.session.execution_log.append(result)
+                return result
+
+        t0 = time.monotonic()
+        result = self.executor.execute(task, self.session)
+        result.duration_ms = int((time.monotonic() - t0) * 1000)
+
+        if result.stdout:
+            self._print(
+                result.stdout if result.stdout.endswith("\n") else result.stdout + "\n"
+            )
+        if result.stderr:
+            self._print(f"[stderr] {result.stderr}")
+        if not result.success:
+            self._print(f"[Error] Step '{task.name}' failed (rc={result.returncode}).")
+
+        self.session.execution_log.append(result)
+        return result
 
 
 def _load_auto_approved() -> set[str]:

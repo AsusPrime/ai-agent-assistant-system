@@ -41,7 +41,9 @@ class PreflightResult:
         failed = [r for r in self.results if not r.satisfied]
         lines = [f"Missing {len(failed)} requirement(s):"]
         for r in failed:
-            lines.append(f"  - [{r.requirement.type.value}] {r.requirement.name}: {r.message}")
+            lines.append(
+                f"  - [{r.requirement.type.value}] {r.requirement.name}: {r.message}"
+            )
         return "\n".join(lines)
 
 
@@ -55,9 +57,7 @@ def check_requirements(requirements: list[Requirement]) -> PreflightResult:
         if not result.satisfied and req.type == RequirementType.ENV_VAR:
             missing_vars.append(req.name)
 
-    all_required_ok = all(
-        r.satisfied for r in results if not r.requirement.optional
-    )
+    all_required_ok = all(r.satisfied for r in results if not r.requirement.optional)
     return PreflightResult(
         passed=all_required_ok,
         results=results,
@@ -106,8 +106,13 @@ def _app_exists(name: str) -> bool:
                     return True
         try:
             result = subprocess.run(
-                ["mdfind", f"kMDItemKind == 'Application' && kMDItemDisplayName == '{name}*'"],
-                capture_output=True, text=True, timeout=5,
+                [
+                    "mdfind",
+                    f"kMDItemKind == 'Application' && kMDItemDisplayName == '{name}*'",
+                ],
+                capture_output=True,
+                text=True,
+                timeout=5,
             )
             return bool(result.stdout.strip())
         except Exception:

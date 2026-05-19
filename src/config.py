@@ -35,6 +35,7 @@ class Settings(BaseSettings):
     MCP_ERROR_BODY_MAX: int = 800
 
     PLANNER_MAX_RETRIES: int = 3
+    REACT_MAX_ITERATIONS: int = 50
 
     KB_MAX_FILE_BYTES: int = 512 * 1024
     KB_CHUNK_SIZE: int = 500

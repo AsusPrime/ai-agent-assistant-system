@@ -6,7 +6,7 @@ from core.engine import ExecutionEngine
 from core.memory import MessageRepository
 from core.planner import build_planner_agent, format_mcp_tools_section, planner_agent
 from core.privacy import PrivacyGuard
-from core.schemas import Plan, TaskResult
+from core.schemas import Plan, Task, TaskResult
 from core.session import SessionState
 from core.summarizer import summary_agent
 from integrations.mcp_client import MCPManager
@@ -101,21 +101,66 @@ class AkashiCore:
                 {"input_length": len(user_input), "masked_count": len(pii_map)}
             )
 
-        plan = self._get_plan(masked_input)
-        if plan is None:
-            return QueryResult()
-        plan = _unmask_plan(plan, self.session.pii_map)
+        return self._react_loop(user_input, masked_input)
 
-        if len(plan.tasks) == 1 and plan.tasks[0].action == ActionTypeEnum.CHAT:
-            return QueryResult(reply=plan.tasks[0].name)
+    def _react_loop(self, user_input: str, masked_input: str) -> QueryResult:
+        observations: list[TaskResult] = []
+        max_iter = settings.REACT_MAX_ITERATIONS
 
-        self._print_plan(plan)
-        task_results = self._execute_plan(plan)
+        for iteration in range(max_iter):
+            prompt = self._build_react_prompt(masked_input, observations)
+            plan = self._get_plan(prompt)
+            if plan is None:
+                break
+            plan = _unmask_plan(plan, self.session.pii_map)
 
-        retries_exhausted = self._retry_loop(task_results)
+            if len(plan.tasks) == 1 and plan.tasks[0].action == ActionTypeEnum.CHAT:
+                reply = _extract_chat_reply(plan)
+                return QueryResult(reply=reply, task_results=observations)
 
-        summary = self._summarize(user_input, task_results, retries_exhausted)
-        return QueryResult(task_results=task_results, summary=summary)
+            task = plan.tasks[0]
+            self._print(f"[Step {iteration + 1}] {task.action.value} | {task.name}")
+
+            if not self._confirm(
+                f"  Виконати {task.action.value} | {task.name}? [y/N]: "
+            ):
+                self._print("Cancelled by user.")
+                observations.append(TaskResult(task=task, skipped=True))
+                break
+
+            result = self.engine.run_single(task, pre_approved=True)
+            observations.append(result)
+
+            if result.skipped:
+                break
+
+        summary = self._summarize(user_input, observations, retries_exhausted=False)
+        return QueryResult(task_results=observations, summary=summary)
+
+    def _build_react_prompt(
+        self, original_query: str, observations: list[TaskResult]
+    ) -> str:
+        if not observations:
+            return original_query
+
+        lines = [f'Original request: "{original_query}"', "", "Steps completed so far:"]
+        for i, r in enumerate(observations, 1):
+            lines.append(
+                f"  Step {i}: [{r.status}] {r.task.action.value} {r.task.name}"
+            )
+            if r.stdout.strip():
+                masked, _ = self.guard.mask(r.stdout.strip()[:500])
+                lines.append(f"    stdout: {masked}")
+            if r.stderr.strip():
+                masked, _ = self.guard.mask(r.stderr.strip()[:300])
+                lines.append(f"    stderr: {masked}")
+            if r.skipped:
+                lines.append("    (skipped by user)")
+        lines.append("")
+        lines.append(
+            "Based on these results, return the NEXT single step, or a chat task if the request is fulfilled."
+        )
+        return "\n".join(lines)
 
     # -- planning --------------------------------------------------------
 
@@ -164,105 +209,59 @@ class AkashiCore:
 
     # -- execution -------------------------------------------------------
 
-    def _execute_plan(self, plan: Plan) -> list[TaskResult]:
-        results = self.engine.run(plan)
+    def _execute_plan(self, plan: Plan, pre_approved: bool = False) -> list[TaskResult]:
+        results = self.engine.run(plan, pre_approved=pre_approved)
         if settings.DEBUG:
             self._print_execution_log(results)
         return results
 
-    def execute_plan(self, plan: Plan) -> list[TaskResult]:
-        return self._execute_plan(plan)
+    def execute_plan(self, plan: Plan, pre_approved: bool = False) -> list[TaskResult]:
+        return self._execute_plan(plan, pre_approved=pre_approved)
 
-    # -- self-correction -------------------------------------------------
+    def summarize(self, user_input: str, results: list[TaskResult]) -> str | None:
+        return self._summarize(user_input, results, retries_exhausted=False)
 
-    def _retry_loop(self, task_results: list[TaskResult]) -> bool:
-        max_retries = settings.PLANNER_MAX_RETRIES
-        for attempt in range(1, max_retries + 1):
-            failed_steps = [r for r in task_results if not r.success and not r.skipped]
-            if not failed_steps:
-                return False
+    def react_step(
+        self,
+        user_input: str,
+        observations: list[dict],
+    ) -> tuple[Task | None, str | None]:
+        masked_input, pii_map = self.guard.mask(user_input)
+        self.session.pii_map.update(pii_map)
 
-            self._print(
-                f"[Correction] Attempt {attempt}/{max_retries} — asking LLM for a corrected plan..."
+        obs_results = [
+            TaskResult(
+                task=Task(
+                    action=o["action"], name=o["name"], params=o.get("params", {})
+                ),
+                stdout=o.get("stdout", ""),
+                stderr=o.get("stderr", ""),
+                returncode=o.get("returncode", 0),
+                skipped=o.get("skipped", False),
             )
-            correction_prompt = self._build_correction_prompt(task_results)
-
-            plan = self._get_plan(correction_prompt)
-            if plan is None:
-                return False
-
-            plan = _unmask_plan(plan, self.session.pii_map)
-
-            if len(plan.tasks) == 1 and plan.tasks[0].action == ActionTypeEnum.CHAT:
-                self._print(f"Assistant: {plan.tasks[0].name}")
-                return False
-
-            self._print_plan(plan)
-
-            msg = f"Execute corrected plan (attempt {attempt})? [y/N]: "
-            if not self._confirm(msg):
-                self._print("Cancelled.")
-                return False
-
-            task_results.clear()
-            task_results.extend(self._execute_plan(plan))
-
-            if attempt == max_retries:
-                if any(not r.success and not r.skipped for r in task_results):
-                    return True
-        return False
-
-    def _build_correction_prompt(self, results: list[TaskResult]) -> str:
-        lines = [
-            "The following steps were executed and one failed. Suggest a corrected plan:"
+            for o in observations
         ]
-        for r in results:
-            lines.append(
-                f"  [{r.status}] {r.task.action.value} {r.task.name} → rc={r.returncode}"
-            )
-            if r.stdout.strip():
-                masked, _ = self.guard.mask(r.stdout.strip()[:200])
-                lines.append(f"    stdout: {masked!r}")
-            if r.stderr.strip():
-                masked, _ = self.guard.mask(r.stderr.strip()[:200])
-                lines.append(f"    stderr: {masked!r}")
-            # For failed MCP calls, surface the schema of the specific tool —
-            # the system prompt has the full catalog, but pinpointing the
-            # offending tool's schema accelerates correction (especially for
-            # arg-name / arg-type mistakes).
-            if (
-                not r.success
-                and r.task.action == ActionTypeEnum.MCP_CALL
-                and self.mcp_manager is not None
-                and self.mcp_manager.connected
-            ):
-                schema_hint = self._format_tool_schema_hint(r.task.name)
-                if schema_hint:
-                    lines.append(f"    expected for '{r.task.name}': {schema_hint}")
-        return "\n".join(lines)
 
-    def _format_tool_schema_hint(self, tool_name: str) -> str:
-        try:
-            tools = self.mcp_manager.list_tools()
-        except Exception:
-            return ""
-        for t in tools:
-            if t.get("name") != tool_name:
-                continue
-            schema = t.get("input_schema") or {}
-            props = (schema.get("properties") if isinstance(schema, dict) else {}) or {}
-            required = set(
-                (schema.get("required") if isinstance(schema, dict) else []) or []
-            )
-            if not props:
-                return "no args"
-            arg_specs: list[str] = []
-            for k, spec in props.items():
-                ptype = (spec or {}).get("type") if isinstance(spec, dict) else None
-                marker = "*" if k in required else ""
-                arg_specs.append(f"{k}{marker}: {ptype or 'any'}")
-            return "(" + ", ".join(arg_specs) + ")"
-        return ""
+        prompt = self._build_react_prompt(masked_input, obs_results)
+        plan = self._get_plan(prompt)
+        if plan is None:
+            return None, None
+
+        plan = _unmask_plan(plan, self.session.pii_map)
+
+        if len(plan.tasks) == 1 and plan.tasks[0].action == ActionTypeEnum.CHAT:
+            reply = _extract_chat_reply(plan)
+            return None, reply
+
+        return plan.tasks[0], None
+
+    def execute_single(self, task_dict: dict) -> TaskResult:
+        task = Task(
+            action=task_dict["action"],
+            name=task_dict["name"],
+            params=task_dict.get("params", {}),
+        )
+        return self.engine.run_single(task, pre_approved=True)
 
     # -- summarization ---------------------------------------------------
 
@@ -309,6 +308,15 @@ class AkashiCore:
 
 
 # -- module-level helpers ------------------------------------------------
+
+
+def _extract_chat_reply(plan: Plan) -> str:
+    name = plan.tasks[0].name
+    if " " in name and len(name) > 20:
+        return name
+    if plan.reasoning and len(plan.reasoning) > len(name):
+        return plan.reasoning
+    return name
 
 
 def _unmask_str(s: str, mapping: dict[str, str]) -> str:

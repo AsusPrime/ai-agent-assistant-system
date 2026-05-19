@@ -111,9 +111,7 @@ def mcp_call(task: Task, session: SessionState) -> TaskResult:
                 stderr=f"MCP tool '{tool}' requires HITL but no confirm_fn is set",
                 returncode=1,
             )
-        prompt = (
-            f"  MCP call requires approval: {tool} | args={final_args}. Execute? [y/N]: "
-        )
+        prompt = f"  MCP call requires approval: {tool} | args={final_args}. Execute? [y/N]: "
         if not confirm(prompt):
             return TaskResult(
                 task=task, stderr="cancelled by user", skipped=True, returncode=1

@@ -74,6 +74,23 @@ Data flow: `Task (Pydantic model)` → `Executor` → `TOOL_REGISTRY` → `OSHan
 - Critical actions (file deletion, system changes) must go through HITL confirmation — never bypass.
 - PII masking by Privacy Agent must happen **before** any data reaches a cloud LLM.
 
+### UI Layer (Desktop GUI)
+
+Floating always-on-top bar powered by PySide6. Thin client — sends queries to `localhost:8000/query` API.
+
+- `src/ui/app.py` — `AkashiApp`: QApplication + system tray (show/hide/quit)
+- `src/ui/main_window.py` — `FloatingBar`: frameless, always-on-top, draggable window
+- `src/ui/input_bar.py` — `InputBar`: text input widget, emits `submitted` signal on Enter
+- `src/ui/status_card.py` — `StatusPanel` + `TaskCard`: task execution cards with status dots
+- `src/ui/tamagotchi.py` — `TamagotchiWidget`: animated kaomoji character with bounce animations
+- `src/ui/emotions.py` — `Emotion` enum, `TimeOfDay`, rule-based emotion mapper
+- `src/ui/fonts.py` — cross-platform font family resolver (macOS/Windows/Linux)
+- `src/ui/api_client.py` — `AkashiApiClient`: HTTP client in QThread, signals for query lifecycle
+- `src/ui/assets/` — SVG icon, future sprites
+
+Launch: `scripts/run_ui.sh` or `cd src && python -m ui.app`
+Build: `python scripts/build.py` → `dist/Akashi` (.exe / .app / ELF)
+
 ## Key Dependencies
 
 | Package | Purpose |
@@ -86,6 +103,8 @@ Data flow: `Task (Pydantic model)` → `Executor` → `TOOL_REGISTRY` → `OSHan
 | `redis` | State management (planned) |
 | `logfire` | Observability |
 | `mcp` | MCP protocol support |
+| `PySide6` | Desktop GUI (floating bar, system tray) |
+| `PyInstaller` | Cross-platform packaging (.exe / .app / ELF) |
 
 ## Import Paths
 

@@ -35,8 +35,12 @@ def build_system_prompt(mcp_tools_section: str = "") -> str:
         "add a verification step first: action='run_command', name='which', params={\"args\": [\"<cmd>\"]}. "
         "Only invoke tools when the user explicitly asks for a concrete action (e.g. 'open X', 'run Y', 'read file Z'). "
         "For anything else — small talk, opinions, questions you can answer from your own knowledge — "
-        "return EXACTLY ONE Task with action='chat' and name=<your full reply text to the user>; "
-        "never put an identifier or label in name, it must be the actual message the user will read. "
+        "return EXACTLY ONE Task with action='chat' and name=<your full reply text to the user>. "
+        "CRITICAL RULE FOR CHAT: the 'name' field MUST contain the ENTIRE reply message as a human-readable sentence/paragraph. "
+        "NEVER put a label, identifier, function name, or category in 'name'. "
+        'CORRECT example: {"tasks": [{"action": "chat", "name": "Привіт! Я — Akashi, твій AI-асистент. Чим можу допомогти?", "params": {}}], "reasoning": ""}\n'
+        'WRONG example: {"tasks": [{"action": "chat", "name": "chat_response", "params": {}}], "reasoning": "..."}\n'
+        'WRONG example: {"tasks": [{"action": "chat", "name": "greeting", "params": {}}], "reasoning": "..."}\n'
         "Never mix chat with other tasks. "
         "If the user wants to open an app, use action='open_app' and set 'name' to the app name from the auto-approved list. "
         "If the user wants to run a command, use action='run_command', set 'name' to the command. "
@@ -59,7 +63,16 @@ def build_system_prompt(mcp_tools_section: str = "") -> str:
         "action='web_read' (params={'url': ...}) fetches a web page and returns its main text content. "
         "action='http_request' (params={'method': 'GET'|'POST'|..., 'url': ..., 'headers': {...}, 'json': {...}, 'timeout': 15}) calls an arbitrary HTTP API. "
         "Prefer 'web_search' for general lookup, 'web_read' for reading a known page, 'http_request' only for structured APIs. "
-        "If the user asks a follow-up about something already fetched in this conversation, answer from message_history — do NOT call web_search/web_read again."
+        "If the user asks a follow-up about something already fetched in this conversation, answer from message_history — do NOT call web_search/web_read again.\n"
+        "\n"
+        "STEP-BY-STEP EXECUTION MODE:\n"
+        "You operate in a think-act-observe loop. You will be called repeatedly.\n"
+        "Each call, return a Plan with ONLY ONE Task — the next action to perform.\n"
+        "After execution, you will receive the result (stdout/stderr/returncode) and must decide the next step.\n"
+        "When the user's original request is fully satisfied, return a single Task with action='chat' "
+        "containing your final answer/summary. This ends the loop.\n"
+        "If a step fails, analyze the error and either retry with a different approach or return a chat explaining what went wrong.\n"
+        "Never return multiple tasks at once — always exactly one."
     )
     if mcp_tools_section:
         base = base + "\n\n" + mcp_tools_section

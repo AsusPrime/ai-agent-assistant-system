@@ -7,15 +7,21 @@ from fastapi.concurrency import run_in_threadpool
 
 from api.schemas import (
     ExecuteResponse,
+    ExecuteSingleRequest,
+    ExecuteSingleResponse,
     HistoryResponse,
     HistoryTurn,
     PlanRequest,
+    PlanResponse,
+    PlanTask,
     QueryRequest,
     QueryResponse,
     RecipeListResponse,
     RecipeRunRequest,
     RecipeSaveRequest,
     StatusResponse,
+    StepRequest,
+    StepResponse,
     TaskExecution,
 )
 from config import settings
@@ -55,6 +61,34 @@ def _get_core(request: Request) -> AkashiCore:
     if core is None:
         raise HTTPException(status_code=503, detail="core not initialized")
     return core
+
+
+@app.post("/plan", response_model=PlanResponse)
+async def plan(req: QueryRequest, request: Request) -> PlanResponse:
+    core = _get_core(request)
+    buf: list[str] = request.app.state.messages_buffer
+    buf.clear()
+
+    try:
+        plan_obj, reply = await run_in_threadpool(core.plan_only, req.text)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"planning failed: {e}")
+
+    if reply is not None:
+        return PlanResponse(reply=reply, messages=list(buf))
+
+    if plan_obj is None:
+        return PlanResponse(messages=list(buf))
+
+    tasks = [
+        PlanTask(
+            action=t.action.value,
+            name=t.name,
+            params=t.params,
+        )
+        for t in plan_obj.tasks
+    ]
+    return PlanResponse(tasks=tasks, reasoning=plan_obj.reasoning, messages=list(buf))
 
 
 @app.post("/query", response_model=QueryResponse)
@@ -139,9 +173,16 @@ async def execute_plan(req: PlanRequest, request: Request) -> ExecuteResponse:
     )
 
     try:
-        results = await run_in_threadpool(core.execute_plan, plan)
+        results = await run_in_threadpool(core.execute_plan, plan, True)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"execution failed: {e}")
+
+    summary = None
+    if req.query:
+        try:
+            summary = await run_in_threadpool(core.summarize, req.query, results)
+        except Exception as e:
+            buf.append(f"[Summary Error] {e}")
 
     tasks = [
         TaskExecution(
@@ -154,7 +195,62 @@ async def execute_plan(req: PlanRequest, request: Request) -> ExecuteResponse:
         )
         for r in results
     ]
-    return ExecuteResponse(tasks=tasks, messages=list(buf))
+    return ExecuteResponse(tasks=tasks, summary=summary, messages=list(buf))
+
+
+@app.post("/step", response_model=StepResponse)
+async def react_step(req: StepRequest, request: Request) -> StepResponse:
+    core = _get_core(request)
+    buf: list[str] = request.app.state.messages_buffer
+    buf.clear()
+
+    observations = [o.model_dump() for o in req.observations]
+
+    try:
+        task, reply = await run_in_threadpool(core.react_step, req.text, observations)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"step failed: {e}")
+
+    if reply is not None:
+        return StepResponse(reply=reply, done=True, messages=list(buf))
+
+    if task is None:
+        error_reply = next(
+            (m for m in buf if "[LLM Error]" in m or "[Memory]" in m), None
+        )
+        return StepResponse(reply=error_reply, done=True, messages=list(buf))
+
+    return StepResponse(
+        task=PlanTask(action=task.action.value, name=task.name, params=task.params),
+        done=False,
+        messages=list(buf),
+    )
+
+
+@app.post("/execute-single", response_model=ExecuteSingleResponse)
+async def execute_single(
+    req: ExecuteSingleRequest, request: Request
+) -> ExecuteSingleResponse:
+    core = _get_core(request)
+    buf: list[str] = request.app.state.messages_buffer
+    buf.clear()
+
+    try:
+        result = await run_in_threadpool(core.execute_single, req.model_dump())
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"execution failed: {e}")
+
+    return ExecuteSingleResponse(
+        action=result.task.action.value,
+        name=result.task.name,
+        status=result.status,
+        stdout=result.stdout,
+        stderr=result.stderr,
+        returncode=result.returncode,
+        skipped=result.skipped,
+        duration_ms=result.duration_ms,
+        messages=list(buf),
+    )
 
 
 @app.get("/recipes", response_model=RecipeListResponse)

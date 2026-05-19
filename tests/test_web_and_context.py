@@ -12,13 +12,11 @@ import os
 import sys
 from unittest.mock import MagicMock, patch
 
-
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
 from core.enums import ActionTypeEnum  # noqa: E402
 from core.schemas import Plan, Task  # noqa: E402
 from core.session import SessionState  # noqa: E402
-
 
 # ---------------------------------------------------------------------------
 # web_search

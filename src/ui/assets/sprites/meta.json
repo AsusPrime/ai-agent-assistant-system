@@ -1,0 +1,30 @@
+{
+  "idle": {
+    "frame_ms": 220,
+    "loop": true
+  },
+  "thinking": {
+    "frame_ms": 180,
+    "loop": true
+  },
+  "happy": {
+    "frame_ms": 100,
+    "loop": false
+  },
+  "sad": {
+    "frame_ms": 300,
+    "loop": false
+  },
+  "error": {
+    "frame_ms": 120,
+    "loop": false
+  },
+  "greeting": {
+    "frame_ms": 120,
+    "loop": false
+  },
+  "sleepy": {
+    "frame_ms": 400,
+    "loop": true
+  }
+}

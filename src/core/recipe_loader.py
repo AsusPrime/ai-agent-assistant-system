@@ -31,7 +31,9 @@ def load_recipe(name: str) -> Recipe:
     data = json.loads(path.read_text(encoding="utf-8"))
     tasks = [Task(**t) for t in data["tasks"]]
     requirements = [Requirement(**r) for r in data.get("requirements", [])]
-    return Recipe(tasks=tasks, reasoning=data.get("reasoning", ""), requirements=requirements)
+    return Recipe(
+        tasks=tasks, reasoning=data.get("reasoning", ""), requirements=requirements
+    )
 
 
 def save_recipe(name: str, recipe: Recipe) -> Path:

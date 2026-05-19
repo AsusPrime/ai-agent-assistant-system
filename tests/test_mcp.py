@@ -27,7 +27,6 @@ from integrations.mcp_client import MCPManager, MCPNotConnectedError  # noqa: E4
 from integrations.mcp_config import AkashiMCPConfig, load_config  # noqa: E402
 from tools.mcp_handler import mcp_call  # noqa: E402
 
-
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
@@ -212,6 +211,7 @@ def test_load_config_malformed_shape_falls_back(tmp_path: Path):
 def _mk_task(tool: str, args: dict | None = None) -> Task:
     """Build an MCP_CALL Task in flat shape: name=tool, params=args."""
     from typing import Any
+
     params: dict[str, Any] = {}
     for k, v in (args or {}).items():
         params[k] = v

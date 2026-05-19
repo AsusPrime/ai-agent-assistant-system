@@ -1,6 +1,6 @@
 import json
 from pathlib import Path
-from pydantic import BaseModel, model_validator
+from pydantic import BaseModel, Field, model_validator
 from typing import Dict
 
 from core.enums import ActionTypeEnum
@@ -11,7 +11,10 @@ _WHITELIST_PATH = Path(__file__).resolve().parent.parent / "tools" / "whitelist.
 
 class Task(BaseModel):
     action: ActionTypeEnum
-    name: str
+    name: str = Field(
+        description="For action='chat': the FULL reply text the user will see. "
+        "For other actions: the command, app name, or tool name to execute."
+    )
     params: Dict[str, str | list[str] | None] = {}
 
     @model_validator(mode="after")
