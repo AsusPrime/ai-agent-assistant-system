@@ -27,6 +27,9 @@ def build_system_prompt(mcp_tools_section: str = "") -> str:
     base = (
         f"You are an AI system orchestrator running on {os_info}. "
         "Return ONLY a Plan object with a list of Task steps. Never explain outside the Plan. "
+        "EVERY Task MUST have a 'description' field — a short human-readable summary of what this step does, "
+        "in the SAME language the user used. This is shown to the user in the UI. "
+        "Examples: 'Searching for the latest video', 'Installing a tool', 'Downloading the file', 'Opening the browser'. "
         f"Auto-approved apps (no confirmation needed): {auto_apps}. "
         f"Auto-approved commands (no confirmation needed): {auto_cmds}. "
         f"Allowed scripts (these are the ONLY scripts that exist on disk — never invoke any other script name): {scripts}. "
@@ -72,7 +75,18 @@ def build_system_prompt(mcp_tools_section: str = "") -> str:
         "When the user's original request is fully satisfied, return a single Task with action='chat' "
         "containing your final answer/summary. This ends the loop.\n"
         "If a step fails, analyze the error and either retry with a different approach or return a chat explaining what went wrong.\n"
-        "Never return multiple tasks at once — always exactly one."
+        "Never return multiple tasks at once — always exactly one.\n"
+        "\n"
+        "PROACTIVE PROBLEM SOLVING:\n"
+        "You MUST find a way to complete the user's request. Never give up or say 'I cannot do this'.\n"
+        "You can run ANY shell command — commands not in the auto-approved list will be shown to the user for confirmation.\n"
+        "If a required tool is not installed:\n"
+        f"  1. Detect the OS (you are on {os_info}) and choose the right package manager automatically\n"
+        "  2. Install the tool (the user will confirm the install command)\n"
+        "  3. Use the tool to complete the task\n"
+        "If one approach fails, try another. Exhaust all options before reporting failure.\n"
+        "You CAN install software, clone repos, download files, use temporary tools.\n"
+        "The user controls what gets executed — you propose, they confirm."
     )
     if mcp_tools_section:
         base = base + "\n\n" + mcp_tools_section

@@ -16,5 +16,6 @@ class SessionState:
         self.execution_log: list[TaskResult] = []
         self.privacy_events: list[dict] = []  # {"input": original, "masked_count": n}
         self.pii_map: dict[str, str] = {}  # {placeholder: original} for current request
+        self.web_cache: dict[str, str] = {}
         self.mcp_manager: "MCPManager | None" = None
         self.confirm_fn = None  # populated by AkashiCore for handlers that need HITL

@@ -40,6 +40,10 @@ def _friendly_llm_error(raw: str) -> str:
     return raw[:150]
 
 
+def _display_name(task: dict) -> str:
+    return task.get("description") or task.get("name", "?")
+
+
 class FloatingBar(QWidget):
     _WIDTH = 420
 
@@ -278,8 +282,9 @@ class FloatingBar(QWidget):
 
         if result.task:
             self._current_task = result.task
+            display = _display_name(result.task)
             if self._ui_auto_approve:
-                running_card = {"name": result.task["name"], "status": "running"}
+                running_card = {"name": display, "status": "running"}
                 self._status_panel.set_tasks(
                     self._completed_cards + [running_card], self._ui_max_visible
                 )
@@ -287,7 +292,7 @@ class FloatingBar(QWidget):
                 self._api.send_exec_single(result.task)
                 self._adjust_height()
             else:
-                pending_card = {"name": result.task["name"], "status": "pending"}
+                pending_card = {"name": display, "status": "pending"}
                 self._status_panel.set_tasks(
                     self._completed_cards + [pending_card], self._ui_max_visible
                 )
@@ -299,7 +304,8 @@ class FloatingBar(QWidget):
         if not self._current_task:
             return
 
-        running_card = {"name": self._current_task["name"], "status": "running"}
+        display = _display_name(self._current_task)
+        running_card = {"name": display, "status": "running"}
         self._status_panel.set_tasks(
             self._completed_cards + [running_card], self._ui_max_visible
         )
@@ -312,8 +318,9 @@ class FloatingBar(QWidget):
         self._input.set_busy(False)
 
         if self._current_task:
+            display = _display_name(self._current_task)
             self._completed_cards.append(
-                {"name": self._current_task["name"], "status": "skipped"}
+                {"name": display, "status": "skipped"}
             )
             self._observations.append(
                 {
@@ -339,7 +346,8 @@ class FloatingBar(QWidget):
             return
 
         status = result.status.lower()
-        self._completed_cards.append({"name": result.name, "status": status})
+        display = _display_name(self._current_task) if self._current_task else result.name
+        self._completed_cards.append({"name": display, "status": status})
 
         self._observations.append(
             {

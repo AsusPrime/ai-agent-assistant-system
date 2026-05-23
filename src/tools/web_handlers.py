@@ -19,6 +19,10 @@ def web_search(task: Task, session: SessionState) -> TaskResult:
     if not query:
         return TaskResult(task=task, stderr="empty query", returncode=1)
 
+    cache_key = f"search:{query.lower()}"
+    if cache_key in session.web_cache:
+        return TaskResult(task=task, stdout=session.web_cache[cache_key], returncode=0)
+
     raw_max = task.params.get("max_results", settings.WEB_MAX_RESULTS)
     try:
         max_results = int(raw_max) if raw_max is not None else settings.WEB_MAX_RESULTS
@@ -38,11 +42,9 @@ def web_search(task: Task, session: SessionState) -> TaskResult:
         }
         for r in results
     ]
-    return TaskResult(
-        task=task,
-        stdout=json.dumps(trimmed, ensure_ascii=False, indent=2),
-        returncode=0,
-    )
+    output = json.dumps(trimmed, ensure_ascii=False, indent=2)
+    session.web_cache[cache_key] = output
+    return TaskResult(task=task, stdout=output, returncode=0)
 
 
 def web_read(task: Task, session: SessionState) -> TaskResult:
@@ -51,6 +53,10 @@ def web_read(task: Task, session: SessionState) -> TaskResult:
         return TaskResult(task=task, stderr="empty url", returncode=1)
     if not url.startswith(("http://", "https://")):
         return TaskResult(task=task, stderr=f"invalid url scheme: {url}", returncode=1)
+
+    cache_key = f"read:{url}"
+    if cache_key in session.web_cache:
+        return TaskResult(task=task, stdout=session.web_cache[cache_key], returncode=0)
 
     try:
         resp = httpx.get(
@@ -68,4 +74,5 @@ def web_read(task: Task, session: SessionState) -> TaskResult:
         return TaskResult(task=task, stderr="no extractable content", returncode=1)
     if len(text) > settings.WEB_MAX_TEXT_LEN:
         text = text[: settings.WEB_MAX_TEXT_LEN] + "\n... [truncated]"
+    session.web_cache[cache_key] = text
     return TaskResult(task=task, stdout=text, returncode=0)

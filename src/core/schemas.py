@@ -15,6 +15,13 @@ class Task(BaseModel):
         description="For action='chat': the FULL reply text the user will see. "
         "For other actions: the command, app name, or tool name to execute."
     )
+    description: str = Field(
+        default="",
+        description="Short human-readable description of what this step does, "
+        "in the same language the user used. "
+        "Examples: 'Searching the web', 'Installing a tool', 'Reading a file'. "
+        "Displayed to the user in the UI.",
+    )
     params: Dict[str, str | list[str] | None] = {}
 
     @model_validator(mode="after")

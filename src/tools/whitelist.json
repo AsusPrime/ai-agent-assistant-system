@@ -1,5 +1,5 @@
 {
-  "allowed_apps":     ["discord", "vscode", "notepad", "safari", "chrome"],
-  "allowed_commands": ["ls", "pwd", "dir", "cp", "echo", "cd"],
+  "allowed_apps":     ["discord", "vscode", "notepad", "safari", "chrome", "telegram", "finder", "terminal"],
+  "allowed_commands": ["ls", "pwd", "dir", "echo", "cd", "cat", "head", "tail", "which", "whoami", "date", "find", "grep", "wc"],
   "allowed_scripts":  ["skill_hello.py"]
 }

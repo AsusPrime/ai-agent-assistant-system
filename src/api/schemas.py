@@ -24,6 +24,7 @@ class QueryResponse(BaseModel):
 class PlanTask(BaseModel):
     action: str
     name: str
+    description: str = ""
     params: dict[str, str | list[str] | None] = {}
 
 
