@@ -18,9 +18,9 @@ SRC = ROOT / "src"
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
-from config import settings
-from integrations.mcp_client import MCPManager
-from integrations.mcp_config import load_config
+from config import settings  # noqa: E402
+from integrations.mcp_client import MCPManager  # noqa: E402
+from integrations.mcp_config import load_config  # noqa: E402
 
 
 def _print_tools(manager: MCPManager) -> None:
@@ -79,7 +79,7 @@ def main() -> int:
         "--call",
         nargs=2,
         metavar=("SERVER:TOOL", "ARGS_JSON"),
-        help="Optionally invoke a tool, e.g. --call fetch:fetch '{\"url\":\"...\"}'",
+        help='Optionally invoke a tool, e.g. --call fetch:fetch \'{"url":"..."}\'',
     )
     args = parser.parse_args()
 

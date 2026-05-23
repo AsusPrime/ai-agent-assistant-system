@@ -49,12 +49,6 @@ _FIELD_DEFS: list[dict] = [
     {"key": "MODEL_NAME", "label": "Model Name", "type": "str", "group": "LLM"},
     {"key": "DEBUG", "label": "Debug Mode", "type": "bool", "group": "General"},
     {
-        "key": "API_AUTO_APPROVE",
-        "label": "Auto-approve (server)",
-        "type": "bool",
-        "group": "General",
-    },
-    {
         "key": "REACT_MAX_ITERATIONS",
         "label": "Max ReAct Steps",
         "type": "int",
@@ -326,6 +320,9 @@ class SettingsPanel(QWidget):
             val = self._get_widget_value(widget, fdef)
             if val is not None:
                 payload[key] = val
+
+        if "UI_AUTO_APPROVE" in payload:
+            payload["API_AUTO_APPROVE"] = payload["UI_AUTO_APPROVE"]
 
         try:
             with httpx.Client(timeout=5.0) as client:

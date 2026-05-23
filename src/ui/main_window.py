@@ -194,12 +194,16 @@ class FloatingBar(QWidget):
             self._settings_window.load_and_show(self.pos())
 
     def _apply_settings(self, data: dict) -> None:
+        was_auto = self._ui_auto_approve
         self._ui_tamagotchi = data.get("UI_TAMAGOTCHI", True)
         self._ui_auto_approve = data.get("UI_AUTO_APPROVE", False)
         self._ui_max_visible = data.get("UI_MAX_VISIBLE_TASKS", 5)
         self._ui_summary_delay = data.get("UI_SUMMARY_DELAY_MS", 1500)
         self._tamagotchi.setVisible(self._ui_tamagotchi)
         self._adjust_height()
+
+        if not was_auto and self._ui_auto_approve and self._current_task:
+            self._on_approve()
 
     def _init_context(self) -> None:
         tod = get_time_of_day()

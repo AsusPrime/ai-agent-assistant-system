@@ -1,0 +1,34 @@
+{
+  "mcpServers": {
+    "fetch": {
+      "command": "uvx",
+      "args": ["mcp-server-fetch"]
+    },
+
+    "filesystem": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-filesystem",
+        "~/Documents"
+      ]
+    },
+
+    "playwright": {
+      "command": "npx",
+      "args": ["-y", "@playwright/mcp@latest"]
+    },
+
+    "context7": {
+      "command": "npx",
+      "args": ["-y", "@upstash/context7-mcp"]
+    }
+  },
+
+  "auto_approve": {
+    "fetch": ["fetch"],
+    "filesystem": ["list_directory", "read_file", "search_files", "directory_tree"],
+    "playwright": ["browser_snapshot", "browser_console_messages", "browser_network_requests"],
+    "context7": ["resolve-library-id", "get-library-docs"]
+  }
+}

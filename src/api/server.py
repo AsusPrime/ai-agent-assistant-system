@@ -1,6 +1,7 @@
 import sqlite3
 import time
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.concurrency import run_in_threadpool
@@ -34,8 +35,9 @@ from core.schemas import Plan, Task
 
 
 def _build_core() -> tuple[AkashiCore, list[str]]:
-    auto_approve = settings.API_AUTO_APPROVE
-    confirm_fn = (lambda _msg: True) if auto_approve else (lambda _msg: False)
+    def confirm_fn(_msg: str) -> bool:
+        return settings.API_AUTO_APPROVE
+
     messages: list[str] = []
     core = AkashiCore(confirm_fn=confirm_fn, on_message=messages.append)
     return core, messages
@@ -320,6 +322,35 @@ _SETTINGS_FIELDS = [
     f.alias or name for name, f in SettingsUpdateRequest.model_fields.items()
 ]
 
+_SECRET_KEYS = {"API_KEY"}
+
+
+def _persist_env(updates: dict) -> None:
+    from dotenv import find_dotenv
+
+    env_path = find_dotenv(filename=".env", usecwd=True)
+    if not env_path:
+        env_path = str(Path.cwd().parent / ".env")
+
+    path = Path(env_path)
+    lines = path.read_text().splitlines() if path.exists() else []
+
+    for key, value in updates.items():
+        if key in _SECRET_KEYS:
+            continue
+        env_line = f"{key}={value}"
+        found = False
+        for i, line in enumerate(lines):
+            stripped = line.strip()
+            if stripped.startswith(f"{key}=") or stripped.startswith(f"# {key}="):
+                lines[i] = env_line
+                found = True
+                break
+        if not found:
+            lines.append(env_line)
+
+    path.write_text("\n".join(lines) + "\n")
+
 
 @app.get("/settings", response_model=SettingsResponse)
 async def get_settings() -> SettingsResponse:
@@ -331,6 +362,7 @@ async def update_settings(req: SettingsUpdateRequest) -> SettingsResponse:
     updates = req.model_dump(exclude_none=True)
     for key, value in updates.items():
         setattr(settings, key, value)
+    _persist_env(updates)
     return SettingsResponse(**{k: getattr(settings, k) for k in _SETTINGS_FIELDS})
 
 
