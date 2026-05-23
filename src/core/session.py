@@ -18,4 +18,4 @@ class SessionState:
         self.pii_map: dict[str, str] = {}  # {placeholder: original} for current request
         self.web_cache: dict[str, str] = {}
         self.mcp_manager: "MCPManager | None" = None
-        self.confirm_fn = None  # populated by AkashiCore for handlers that need HITL
+        self.confirm_fn = None

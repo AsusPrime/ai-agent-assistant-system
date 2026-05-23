@@ -29,7 +29,7 @@ class Settings(BaseSettings):
     WEB_MAX_TEXT_LEN: int = 8000
     HTTP_MAX_BODY_LEN: int = 8000
 
-    MCP_CONFIG_PATH: str = "~/.akashi/mcp_servers.json"
+    MCP_CONFIG_PATH: str = "~/.assistant/mcp_servers.json"
     MCP_CALL_TIMEOUT: float = 30.0
     MCP_DESC_MAX_LEN: int = 500
     MCP_ERROR_BODY_MAX: int = 800

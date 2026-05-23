@@ -32,7 +32,7 @@ class QueryResult:
         return self.reply is not None
 
 
-class AkashiCore:
+class AssistantCore:
     def __init__(
         self,
         confirm_fn: ConfirmFn | None = None,

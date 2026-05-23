@@ -12,7 +12,7 @@ class InputBar(QLineEdit):
 
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
-        self.setPlaceholderText("Ask Akashi something...")
+        self.setPlaceholderText("Ask something...")
         self.setFont(QFont(FONT_FAMILY, 11))
         self.setStyleSheet("""
             QLineEdit {
@@ -40,4 +40,4 @@ class InputBar(QLineEdit):
         if busy:
             self.setPlaceholderText("Processing...")
         else:
-            self.setPlaceholderText("Ask Akashi something...")
+            self.setPlaceholderText("Ask something...")

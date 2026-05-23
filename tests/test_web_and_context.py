@@ -3,7 +3,7 @@
 Verifies:
 - web_search/web_read/http_request return the expected TaskResult shape
   with mocked network calls (no real HTTP).
-- AkashiCore feeds prior message_history back into the planner on the next
+- AssistantCore feeds prior message_history back into the planner on the next
   query (the "context awareness" invariant from W6).
 """
 
@@ -223,7 +223,7 @@ def test_second_query_receives_prior_message_history(tmp_path):
     message_history kwarg.
     """
     os.environ["DATA_DIR"] = str(tmp_path)
-    # Point MCP config to a nonexistent path so AkashiCore does not try to
+    # Point MCP config to a nonexistent path so AssistantCore does not try to
     # start any real MCP servers during the test.
     os.environ["MCP_CONFIG_PATH"] = str(tmp_path / "no-mcp.json")
     # Re-import settings so DATA_DIR is picked up fresh
@@ -232,9 +232,9 @@ def test_second_query_receives_prior_message_history(tmp_path):
     import config
 
     reload(config)
-    from core import akashi
+    from core import assistant
 
-    reload(akashi)
+    reload(assistant)
 
     plan_search = Plan(
         tasks=[
@@ -257,8 +257,8 @@ def test_second_query_receives_prior_message_history(tmp_path):
     ]
 
     with (
-        patch("core.akashi.planner_agent") as planner,
-        patch("core.akashi.summary_agent") as summary,
+        patch("core.assistant.planner_agent") as planner,
+        patch("core.assistant.summary_agent") as summary,
         patch("tools.web_handlers.DDGS") as ddgs_cls,
     ):
         planner.run_sync.side_effect = [
@@ -268,7 +268,7 @@ def test_second_query_receives_prior_message_history(tmp_path):
         summary.run_sync.return_value = MagicMock(output="done")
         ddgs_cls.return_value.text.return_value = fake_search_result
 
-        core = akashi.AkashiCore(confirm_fn=lambda _m: True, on_message=lambda _m: None)
+        core = assistant.AssistantCore(confirm_fn=lambda _m: True, on_message=lambda _m: None)
         # both queries
         r1 = core.process_query("what is the weather in Kyiv?")
         r2 = core.process_query("what was the result?")

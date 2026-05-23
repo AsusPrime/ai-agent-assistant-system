@@ -28,18 +28,18 @@ from api.schemas import (
     TaskExecution,
 )
 from config import settings
-from core.akashi import AkashiCore
+from core.assistant import AssistantCore
 from core.recipe_loader import Recipe, list_recipes, load_recipe, save_recipe
 from core.requirements import check_requirements
 from core.schemas import Plan, Task
 
 
-def _build_core() -> tuple[AkashiCore, list[str]]:
+def _build_core() -> tuple[AssistantCore, list[str]]:
     def confirm_fn(_msg: str) -> bool:
         return settings.API_AUTO_APPROVE
 
     messages: list[str] = []
-    core = AkashiCore(confirm_fn=confirm_fn, on_message=messages.append)
+    core = AssistantCore(confirm_fn=confirm_fn, on_message=messages.append)
     return core, messages
 
 
@@ -57,11 +57,11 @@ async def lifespan(app: FastAPI):
         app.state.messages_buffer = []
 
 
-app = FastAPI(title="Akashi API", version="0.1.0", lifespan=lifespan)
+app = FastAPI(title="AI Assistant API", version="0.1.0", lifespan=lifespan)
 
 
-def _get_core(request: Request) -> AkashiCore:
-    core: AkashiCore | None = getattr(request.app.state, "core", None)
+def _get_core(request: Request) -> AssistantCore:
+    core: AssistantCore | None = getattr(request.app.state, "core", None)
     if core is None:
         raise HTTPException(status_code=503, detail="core not initialized")
     return core

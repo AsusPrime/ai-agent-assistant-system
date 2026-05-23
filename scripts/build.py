@@ -1,9 +1,9 @@
 """
-Cross-platform build script for Akashi UI.
+Cross-platform build script for AIAssistant UI.
 Produces:
-  - Windows: dist/Akashi.exe
-  - macOS:   dist/Akashi.app
-  - Linux:   dist/Akashi (ELF binary)
+  - Windows: dist/AIAssistant.exe
+  - macOS:   dist/AIAssistant.app
+  - Linux:   dist/AIAssistant (ELF binary)
 
 Usage:
   python scripts/build.py
@@ -35,7 +35,7 @@ def build() -> None:
         "-m",
         "PyInstaller",
         "--name",
-        "Akashi",
+        "AIAssistant",
         "--onefile",
         "--noconsole",
         "--distpath",

@@ -24,7 +24,7 @@ from core.planner import build_system_prompt, format_mcp_tools_section  # noqa: 
 from core.schemas import Task  # noqa: E402
 from core.session import SessionState  # noqa: E402
 from integrations.mcp_client import MCPManager, MCPNotConnectedError  # noqa: E402
-from integrations.mcp_config import AkashiMCPConfig, load_config  # noqa: E402
+from integrations.mcp_config import MCPConfig, load_config  # noqa: E402
 from tools.mcp_handler import mcp_call  # noqa: E402
 
 # ---------------------------------------------------------------------------
@@ -34,7 +34,7 @@ from tools.mcp_handler import mcp_call  # noqa: E402
 
 @pytest.fixture
 def mcp_server() -> FastMCP:
-    srv = FastMCP("akashi-test")
+    srv = FastMCP("test-server")
 
     @srv.tool
     def add(a: int, b: int) -> int:
@@ -80,7 +80,7 @@ def manager(mcp_server: FastMCP):
 
 
 def test_empty_config_start_is_noop():
-    mgr = MCPManager(config=AkashiMCPConfig())
+    mgr = MCPManager(config=MCPConfig())
     mgr.start()
     assert mgr.connected is False
     # list_tools on disconnected manager must fail loudly
@@ -145,7 +145,7 @@ def test_call_tool_unknown_tool_errors(manager: MCPManager):
 
 
 def test_is_auto_approved_exact_match():
-    cfg = AkashiMCPConfig(
+    cfg = MCPConfig(
         servers={"fetch": {"command": "x"}},
         auto_approve={"fetch": ["fetch"]},
     )
@@ -156,7 +156,7 @@ def test_is_auto_approved_exact_match():
 
 
 def test_is_auto_approved_empty_config():
-    mgr = MCPManager(config=AkashiMCPConfig())
+    mgr = MCPManager(config=MCPConfig())
     assert mgr.is_auto_approved("anything") is False
 
 
@@ -263,7 +263,7 @@ def test_handler_requires_hitl_when_not_auto_approved(manager: MCPManager):
 
 
 def test_handler_skips_hitl_when_auto_approved(mcp_server: FastMCP):
-    cfg = AkashiMCPConfig(auto_approve={"any": ["echo"]})
+    cfg = MCPConfig(auto_approve={"any": ["echo"]})
     mgr = MCPManager(config=cfg, transport=mcp_server)
     mgr.start()
     try:
@@ -322,9 +322,9 @@ def test_handler_accepts_flat_task_shape(manager: MCPManager):
 
 def test_handler_rejects_server_name_used_as_tool(mcp_server: FastMCP):
     """A server name must not be accepted as a tool name."""
-    from integrations.mcp_config import AkashiMCPConfig
+    from integrations.mcp_config import MCPConfig
 
-    cfg = AkashiMCPConfig(
+    cfg = MCPConfig(
         servers={"fakeServerA": {"command": "noop"}},
         auto_approve={},
     )

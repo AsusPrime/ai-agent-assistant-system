@@ -4,7 +4,7 @@ from typing import Any
 
 from fastmcp import Client
 
-from integrations.mcp_config import AkashiMCPConfig
+from integrations.mcp_config import MCPConfig
 
 
 class MCPNotConnectedError(RuntimeError):
@@ -12,23 +12,17 @@ class MCPNotConnectedError(RuntimeError):
 
 
 class MCPManager:
-    """Sync façade over fastmcp.Client running in a background event loop.
-
-    fastmcp.Client is async and its session is a context manager. Akashi's
-    executor/handlers are sync, so we run the client inside a persistent
-    asyncio loop on a background thread and expose sync methods that block
-    on `asyncio.run_coroutine_threadsafe(...).result()`.
-    """
+    """Sync façade over fastmcp.Client running in a background event loop."""
 
     def __init__(
         self,
-        config: AkashiMCPConfig | None = None,
+        config: MCPConfig | None = None,
         transport: Any = None,
     ):
         """One of `config` or `transport` is used. `transport` is for tests —
         pass a FastMCP instance or any value accepted by `fastmcp.Client`.
         """
-        self._config = config or AkashiMCPConfig()
+        self._config = config or MCPConfig()
         self._transport = transport
         self._loop: asyncio.AbstractEventLoop | None = None
         self._thread: threading.Thread | None = None
@@ -41,7 +35,7 @@ class MCPManager:
         return self._connected
 
     @property
-    def config(self) -> AkashiMCPConfig:
+    def config(self) -> MCPConfig:
         return self._config
 
     def start(self, timeout: float = 15.0) -> None:

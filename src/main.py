@@ -1,10 +1,10 @@
 from prompt_toolkit import PromptSession
 
-from core.akashi import AkashiCore
+from core.assistant import AssistantCore
 
 
 def main() -> None:
-    core = AkashiCore()
+    core = AssistantCore()
 
     if core.session.message_history:
         print("[Memory] Restored context from previous session.")

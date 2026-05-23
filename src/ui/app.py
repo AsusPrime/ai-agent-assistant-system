@@ -11,10 +11,10 @@ from ui.main_window import FloatingBar
 _ASSETS = Path(__file__).resolve().parent / "assets"
 
 
-class AkashiApp:
+class AssistantApp:
     def __init__(self) -> None:
         self._app = QApplication(sys.argv)
-        self._app.setApplicationName("Akashi")
+        self._app.setApplicationName("AI Assistant")
         self._app.setQuitOnLastWindowClosed(False)
 
         self._bar = FloatingBar()
@@ -40,7 +40,7 @@ class AkashiApp:
 
         tray.setContextMenu(menu)
         tray.activated.connect(self._on_tray_activated)
-        tray.setToolTip("Akashi — AI Assistant")
+        tray.setToolTip("AI Assistant")
         tray.show()
         return tray
 
@@ -80,7 +80,7 @@ class AkashiApp:
 
 
 def main() -> None:
-    app = AkashiApp()
+    app = AssistantApp()
     sys.exit(app.run())
 
 

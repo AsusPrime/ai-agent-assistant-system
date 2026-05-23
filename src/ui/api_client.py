@@ -84,7 +84,7 @@ class _StepWorker(QObject):
             )
         except httpx.ConnectError:
             result = StepResult(
-                error="Cannot connect to Akashi API. Is the server running?"
+                error="Cannot connect to API. Is the server running?"
             )
         except httpx.HTTPStatusError as e:
             result = StepResult(error=f"API error: {e.response.status_code}")
@@ -123,7 +123,7 @@ class _ExecSingleWorker(QObject):
                 duration_ms=data.get("duration_ms", 0),
             )
         except httpx.ConnectError:
-            result = SingleExecResult(error="Cannot connect to Akashi API.")
+            result = SingleExecResult(error="Cannot connect to API.")
         except httpx.HTTPStatusError as e:
             result = SingleExecResult(error=f"API error: {e.response.status_code}")
         except Exception as e:
@@ -167,7 +167,7 @@ class _PlanWorker(QObject):
             )
         except httpx.ConnectError:
             result = PlanResult(
-                error="Cannot connect to Akashi API. Is the server running?"
+                error="Cannot connect to API. Is the server running?"
             )
         except httpx.HTTPStatusError as e:
             result = PlanResult(error=f"API error: {e.response.status_code}")
@@ -213,7 +213,7 @@ class _ExecuteWorker(QObject):
             )
         except httpx.ConnectError:
             result = QueryResult(
-                error="Cannot connect to Akashi API. Is the server running?"
+                error="Cannot connect to API. Is the server running?"
             )
         except httpx.HTTPStatusError as e:
             result = QueryResult(error=f"API error: {e.response.status_code}")
@@ -261,7 +261,7 @@ class _QueryWorker(QObject):
             )
         except httpx.ConnectError:
             result = QueryResult(
-                error="Cannot connect to Akashi API. Is the server running?"
+                error="Cannot connect to API. Is the server running?"
             )
         except httpx.HTTPStatusError as e:
             result = QueryResult(error=f"API error: {e.response.status_code}")
@@ -271,7 +271,7 @@ class _QueryWorker(QObject):
         self.finished.emit(result)
 
 
-class AkashiApiClient(QObject):
+class ApiClient(QObject):
     query_started = Signal(str)
     query_finished = Signal(object)
     plan_finished = Signal(object)

@@ -14,7 +14,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from ui.api_client import AkashiApiClient, SingleExecResult, StepResult
+from ui.api_client import ApiClient, SingleExecResult, StepResult
 from ui.emotions import Emotion, get_time_of_day, TimeOfDay
 from ui.input_bar import InputBar
 from ui.settings_panel import SettingsWindow
@@ -164,7 +164,7 @@ class FloatingBar(QWidget):
 
         self._settings_window = SettingsWindow()
 
-        self._api = AkashiApiClient()
+        self._api = ApiClient()
 
         self._health_timer = QTimer(self)
         self._health_timer.timeout.connect(self._check_health)

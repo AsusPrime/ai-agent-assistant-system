@@ -41,7 +41,7 @@ def build_system_prompt(mcp_tools_section: str = "") -> str:
         "return EXACTLY ONE Task with action='chat' and name=<your full reply text to the user>. "
         "CRITICAL RULE FOR CHAT: the 'name' field MUST contain the ENTIRE reply message as a human-readable sentence/paragraph. "
         "NEVER put a label, identifier, function name, or category in 'name'. "
-        'CORRECT example: {"tasks": [{"action": "chat", "name": "Привіт! Я — Akashi, твій AI-асистент. Чим можу допомогти?", "params": {}}], "reasoning": ""}\n'
+        'CORRECT example: {"tasks": [{"action": "chat", "name": "Hello! I am your AI assistant. How can I help?", "params": {}}], "reasoning": ""}\n'
         'WRONG example: {"tasks": [{"action": "chat", "name": "chat_response", "params": {}}], "reasoning": "..."}\n'
         'WRONG example: {"tasks": [{"action": "chat", "name": "greeting", "params": {}}], "reasoning": "..."}\n'
         "Never mix chat with other tasks. "
