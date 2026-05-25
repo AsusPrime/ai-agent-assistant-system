@@ -173,6 +173,7 @@ class FloatingBar(QWidget):
 
     def _connect_signals(self) -> None:
         self._input.submitted.connect(self._on_submit)
+        self._input.textChanged.connect(self._adjust_height)
         self._api.step_finished.connect(self._on_step_finished)
         self._api.exec_single_finished.connect(self._on_exec_single_finished)
         self._status_panel.approved.connect(self._on_approve)
@@ -204,6 +205,10 @@ class FloatingBar(QWidget):
         self._ui_max_visible = data.get("UI_MAX_VISIBLE_TASKS", 5)
         self._ui_summary_delay = data.get("UI_SUMMARY_DELAY_MS", 1500)
         self._tamagotchi.setVisible(self._ui_tamagotchi)
+
+        font_size = data.get("UI_FONT_SIZE", 9)
+        self._status_panel.set_font_size(font_size)
+
         self._adjust_height()
 
         if not was_auto and self._ui_auto_approve and self._current_task:
@@ -319,9 +324,7 @@ class FloatingBar(QWidget):
 
         if self._current_task:
             display = _display_name(self._current_task)
-            self._completed_cards.append(
-                {"name": display, "status": "skipped"}
-            )
+            self._completed_cards.append({"name": display, "status": "skipped"})
             self._observations.append(
                 {
                     "action": self._current_task["action"],
@@ -346,7 +349,9 @@ class FloatingBar(QWidget):
             return
 
         status = result.status.lower()
-        display = _display_name(self._current_task) if self._current_task else result.name
+        display = (
+            _display_name(self._current_task) if self._current_task else result.name
+        )
         self._completed_cards.append({"name": display, "status": status})
 
         self._observations.append(

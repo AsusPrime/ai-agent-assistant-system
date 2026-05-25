@@ -268,7 +268,9 @@ def test_second_query_receives_prior_message_history(tmp_path):
         summary.run_sync.return_value = MagicMock(output="done")
         ddgs_cls.return_value.text.return_value = fake_search_result
 
-        core = assistant.AssistantCore(confirm_fn=lambda _m: True, on_message=lambda _m: None)
+        core = assistant.AssistantCore(
+            confirm_fn=lambda _m: True, on_message=lambda _m: None
+        )
         # both queries
         r1 = core.process_query("what is the weather in Kyiv?")
         r2 = core.process_query("what was the result?")

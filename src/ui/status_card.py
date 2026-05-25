@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-from PySide6.QtCore import Qt, QPropertyAnimation, QEasingCurve, Property, Signal
-from PySide6.QtGui import QColor, QFont, QPainter
+from PySide6.QtCore import Qt, QPropertyAnimation, QEasingCurve, Property, Signal, QUrl
+from PySide6.QtGui import QColor, QFont, QImage, QPainter, QTextDocument
+from PySide6.QtNetwork import QNetworkAccessManager, QNetworkRequest, QNetworkReply
 from PySide6.QtWidgets import (
     QWidget,
     QVBoxLayout,
@@ -9,9 +10,63 @@ from PySide6.QtWidgets import (
     QLabel,
     QSizePolicy,
     QPushButton,
+    QTextBrowser,
 )
 
+import re
+
+from markdown_it import MarkdownIt
+
 from ui.fonts import FONT_FAMILY
+
+_md = MarkdownIt().enable(["table", "strikethrough"])
+
+_TASKLIST_RE = re.compile(r"<li>\[([ xX])\]\s*", re.MULTILINE)
+
+_CSS = """\
+<style>
+body {{ color: #c0c0c0; font-family: {font}; font-size: {size}pt; }}
+h1 {{ font-size: {h1}pt; color: #7ec8e3; margin: 4px 0; }}
+h2 {{ font-size: {h2}pt; color: #7ec8e3; margin: 3px 0; }}
+h3 {{ font-size: {h3}pt; color: #7ec8e3; margin: 2px 0; }}
+h4, h5, h6 {{ font-size: {h4}pt; color: #7ec8e3; margin: 2px 0; }}
+code {{ background: #2a2a3e; padding: 1px 4px; border-radius: 3px; font-size: {code}pt; }}
+pre {{ background: #2a2a3e; padding: 6px 8px; border-radius: 6px; overflow-x: auto; }}
+pre code {{ background: transparent; padding: 0; }}
+blockquote {{ border-left: 3px solid #3a3a5e; margin: 4px 0; padding: 2px 8px; color: #a0a0b8; }}
+a {{ color: #7ec8e3; }}
+table {{ border-collapse: collapse; margin: 4px 0; }}
+th, td {{ border: 1px solid #3a3a5e; padding: 3px 8px; }}
+th {{ background: #2a2a3e; }}
+hr {{ border: none; border-top: 1px solid #3a3a5e; margin: 6px 0; }}
+img {{ max-width: 100%; }}
+.task-done {{ color: #06d6a0; }}
+.task-todo {{ color: #888; }}
+</style>
+"""
+
+
+def _md_to_html(text: str, font_size: int = 9) -> str:
+    raw = _md.render(text)
+    raw = _TASKLIST_RE.sub(_tasklist_replace, raw)
+    css = _CSS.format(
+        font=FONT_FAMILY,
+        size=font_size,
+        h1=font_size + 4,
+        h2=font_size + 3,
+        h3=font_size + 2,
+        h4=font_size + 1,
+        code=font_size - 1,
+    )
+    return f"{css}{raw}"
+
+
+def _tasklist_replace(m: re.Match) -> str:
+    checked = m.group(1) in ("x", "X")
+    if checked:
+        return '<li class="task-done">✓ '
+    return '<li class="task-todo">☐ '
+
 
 _STATUS_STYLES = {
     "success": ("#06d6a0", "✓"),
@@ -121,12 +176,69 @@ class TaskCard(QWidget):
         return layout
 
 
+_IMG_SRC_RE = re.compile(r'<img\s[^>]*src="([^"]+)"', re.IGNORECASE)
+
+
+class _ImageBrowser(QTextBrowser):
+    _MAX_IMG_WIDTH = 380
+
+    def __init__(self, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self._nam = QNetworkAccessManager(self)
+        self._pending: set[str] = set()
+        self._loaded: set[str] = set()
+
+    def setHtml(self, html: str) -> None:
+        super().setHtml(html)
+        for m in _IMG_SRC_RE.finditer(html):
+            src = m.group(1)
+            if src in self._loaded or src in self._pending:
+                continue
+            url = QUrl(src)
+            if url.scheme() not in ("http", "https"):
+                continue
+            self._pending.add(src)
+            req = QNetworkRequest(url)
+            reply = self._nam.get(req)
+            reply.finished.connect(
+                lambda _r=reply, _u=url, _s=src: self._on_loaded(_r, _u, _s)
+            )
+
+    def _on_loaded(self, reply: QNetworkReply, url: QUrl, src: str) -> None:
+        self._pending.discard(src)
+
+        if reply.error() != QNetworkReply.NetworkError.NoError:
+            reply.deleteLater()
+            return
+
+        data = reply.readAll()
+        reply.deleteLater()
+
+        img = QImage()
+        if not img.loadFromData(data.data()):
+            return
+
+        if img.width() > self._MAX_IMG_WIDTH:
+            img = img.scaledToWidth(
+                self._MAX_IMG_WIDTH, Qt.TransformationMode.SmoothTransformation
+            )
+
+        self._loaded.add(src)
+        self.document().addResource(
+            int(QTextDocument.ResourceType.ImageResource), url, img
+        )
+        cursor_pos = self.verticalScrollBar().value()
+        super().setHtml(self.toHtml())
+        self.verticalScrollBar().setValue(cursor_pos)
+
+
 class StatusPanel(QWidget):
     approved = Signal()
     denied = Signal()
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
+        self._font_size: int = 9
         self._layout = QVBoxLayout()
         self._layout.setContentsMargins(0, 4, 0, 0)
         self._layout.setSpacing(3)
@@ -170,24 +282,42 @@ class StatusPanel(QWidget):
         self._buttons_widget.hide()
         self._layout.addWidget(self._buttons_widget)
 
-        self._reply_label = QLabel("")
-        self._reply_label.setWordWrap(True)
-        self._reply_label.setFont(QFont(FONT_FAMILY, 8))
-        self._reply_label.setStyleSheet(
-            "color: #c0c0c0; background: transparent; padding: 2px 4px;"
-        )
-        self._reply_label.setSizePolicy(
+        self._reply_browser = _ImageBrowser()
+        self._reply_browser.setFont(QFont(FONT_FAMILY, 8))
+        self._reply_browser.setOpenExternalLinks(True)
+        self._reply_browser.setStyleSheet("""
+            QTextBrowser {
+                color: #c0c0c0;
+                background: transparent;
+                border: none;
+                padding: 2px 4px;
+            }
+            QScrollBar:vertical {
+                width: 4px;
+                background: transparent;
+            }
+            QScrollBar::handle:vertical {
+                background: #3a3a5e;
+                border-radius: 2px;
+                min-height: 16px;
+            }
+            QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
+                height: 0px;
+            }
+        """)
+        self._reply_browser.setSizePolicy(
             QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum
         )
-        self._reply_label.hide()
-        self._layout.addWidget(self._reply_label)
+        self._reply_browser.setMaximumHeight(200)
+        self._reply_browser.hide()
+        self._layout.addWidget(self._reply_browser)
 
     def clear(self) -> None:
         for card in self._cards:
             self._layout.removeWidget(card)
             card.deleteLater()
         self._cards.clear()
-        self._reply_label.hide()
+        self._reply_browser.hide()
         self._buttons_widget.hide()
 
     def set_tasks(self, tasks: list[dict], max_visible: int = 5) -> None:
@@ -205,10 +335,15 @@ class StatusPanel(QWidget):
         else:
             self._buttons_widget.hide()
 
+    def set_font_size(self, size: int) -> None:
+        self._font_size = max(6, min(size, 24))
+
     def set_reply(self, text: str) -> None:
         if text:
-            truncated = text[:500] + "…" if len(text) > 500 else text
-            self._reply_label.setText(truncated)
-            self._reply_label.show()
+            html = _md_to_html(text, self._font_size)
+            self._reply_browser.setHtml(html)
+            doc_height = int(self._reply_browser.document().size().height()) + 8
+            self._reply_browser.setFixedHeight(min(doc_height, 200))
+            self._reply_browser.show()
         else:
-            self._reply_label.hide()
+            self._reply_browser.hide()

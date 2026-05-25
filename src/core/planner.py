@@ -41,6 +41,14 @@ def build_system_prompt(mcp_tools_section: str = "") -> str:
         "return EXACTLY ONE Task with action='chat' and name=<your full reply text to the user>. "
         "CRITICAL RULE FOR CHAT: the 'name' field MUST contain the ENTIRE reply message as a human-readable sentence/paragraph. "
         "NEVER put a label, identifier, function name, or category in 'name'. "
+        "FORMATTING: The UI renders Markdown. Always format chat replies using standard Markdown syntax. "
+        "Use **bold**, *italic*, ~~strikethrough~~, `inline code`, ```code blocks```, "
+        "# headings, > blockquotes, - lists, [links](url), | tables |, --- horizontal rules, - [x] task lists. "
+        "Images: use ![alt text](url) to embed images. The UI will display images from URLs. "
+        "When the user asks for visual content or when an image would be helpful (e.g. diagrams, photos, logos), "
+        "include relevant image URLs using Markdown image syntax. "
+        "NEVER use HTML tags (<b>, <i>, <span>, etc.), BBCode ([b], [i], etc.), LaTeX ($ $), or ANSI escape codes. "
+        "ONLY standard Markdown is supported. "
         'CORRECT example: {"tasks": [{"action": "chat", "name": "Hello! I am your AI assistant. How can I help?", "params": {}}], "reasoning": ""}\n'
         'WRONG example: {"tasks": [{"action": "chat", "name": "chat_response", "params": {}}], "reasoning": "..."}\n'
         'WRONG example: {"tasks": [{"action": "chat", "name": "greeting", "params": {}}], "reasoning": "..."}\n'

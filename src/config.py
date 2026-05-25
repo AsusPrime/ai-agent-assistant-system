@@ -45,6 +45,7 @@ class Settings(BaseSettings):
     UI_AUTO_APPROVE: bool = False
     UI_MAX_VISIBLE_TASKS: int = 5
     UI_SUMMARY_DELAY_MS: int = 1500
+    UI_FONT_SIZE: int = 9
     UI_LANGUAGE: str = "uk"
 
 

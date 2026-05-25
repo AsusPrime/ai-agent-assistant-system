@@ -106,6 +106,14 @@ _FIELD_DEFS: list[dict] = [
         "group": "UI",
     },
     {
+        "key": "UI_FONT_SIZE",
+        "label": "Font Size (pt)",
+        "type": "int",
+        "min": 6,
+        "max": 24,
+        "group": "UI",
+    },
+    {
         "key": "UI_LANGUAGE",
         "label": "Language",
         "type": "combo",

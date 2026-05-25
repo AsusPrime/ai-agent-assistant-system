@@ -83,9 +83,7 @@ class _StepWorker(QObject):
                 messages=data.get("messages", []),
             )
         except httpx.ConnectError:
-            result = StepResult(
-                error="Cannot connect to API. Is the server running?"
-            )
+            result = StepResult(error="Cannot connect to API. Is the server running?")
         except httpx.HTTPStatusError as e:
             result = StepResult(error=f"API error: {e.response.status_code}")
         except Exception as e:
@@ -166,9 +164,7 @@ class _PlanWorker(QObject):
                 messages=data.get("messages", []),
             )
         except httpx.ConnectError:
-            result = PlanResult(
-                error="Cannot connect to API. Is the server running?"
-            )
+            result = PlanResult(error="Cannot connect to API. Is the server running?")
         except httpx.HTTPStatusError as e:
             result = PlanResult(error=f"API error: {e.response.status_code}")
         except Exception as e:
@@ -212,9 +208,7 @@ class _ExecuteWorker(QObject):
                 messages=data.get("messages", []),
             )
         except httpx.ConnectError:
-            result = QueryResult(
-                error="Cannot connect to API. Is the server running?"
-            )
+            result = QueryResult(error="Cannot connect to API. Is the server running?")
         except httpx.HTTPStatusError as e:
             result = QueryResult(error=f"API error: {e.response.status_code}")
         except Exception as e:
@@ -260,9 +254,7 @@ class _QueryWorker(QObject):
                 messages=data.get("messages", []),
             )
         except httpx.ConnectError:
-            result = QueryResult(
-                error="Cannot connect to API. Is the server running?"
-            )
+            result = QueryResult(error="Cannot connect to API. Is the server running?")
         except httpx.HTTPStatusError as e:
             result = QueryResult(error=f"API error: {e.response.status_code}")
         except Exception as e:

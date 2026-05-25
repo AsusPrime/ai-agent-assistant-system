@@ -226,7 +226,12 @@ async def react_step(req: StepRequest, request: Request) -> StepResponse:
         return StepResponse(reply=error_reply, done=True, messages=list(buf))
 
     return StepResponse(
-        task=PlanTask(action=task.action.value, name=task.name, description=task.description, params=task.params),
+        task=PlanTask(
+            action=task.action.value,
+            name=task.name,
+            description=task.description,
+            params=task.params,
+        ),
         done=False,
         messages=list(buf),
     )
