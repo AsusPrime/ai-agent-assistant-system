@@ -4,6 +4,7 @@ from tools.api_handler import http_request
 from tools.handlers import open_app, read_file, run_command, run_skill, write_file
 from tools.mcp_handler import mcp_call
 from tools.rag_handler import index_knowledge, search_knowledge
+from tools.system_control import system_control
 from tools.web_handlers import web_read, web_search
 
 TOOL_REGISTRY: dict[str, Callable] = {
@@ -18,4 +19,5 @@ TOOL_REGISTRY: dict[str, Callable] = {
     "web_read": web_read,
     "http_request": http_request,
     "mcp_call": mcp_call,
+    "system_control": system_control,
 }
