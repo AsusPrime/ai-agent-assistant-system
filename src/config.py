@@ -41,6 +41,10 @@ class Settings(BaseSettings):
     KB_CHUNK_SIZE: int = 500
     KB_CHUNK_OVERLAP: int = 50
 
+    PRIVACY_ENTROPY_BASE64: float = 5.0
+    PRIVACY_ENTROPY_HEX: float = 4.0
+    PRIVACY_MIN_SECRET_LEN: int = 8
+
     UI_TAMAGOTCHI: bool = True
     UI_AUTO_APPROVE: bool = False
     UI_MAX_VISIBLE_TASKS: int = 5
