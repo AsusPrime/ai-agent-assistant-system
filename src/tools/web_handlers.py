@@ -47,6 +47,41 @@ def web_search(task: Task, session: SessionState) -> TaskResult:
     return TaskResult(task=task, stdout=output, returncode=0)
 
 
+def image_search(task: Task, session: SessionState) -> TaskResult:
+    query = str(task.params.get("query") or task.name).strip()
+    if not query:
+        return TaskResult(task=task, stderr="empty query", returncode=1)
+
+    cache_key = f"img:{query.lower()}"
+    if cache_key in session.web_cache:
+        return TaskResult(task=task, stdout=session.web_cache[cache_key], returncode=0)
+
+    raw_max = task.params.get("max_results", 5)
+    try:
+        max_results = int(raw_max) if raw_max is not None else 5
+    except (TypeError, ValueError):
+        max_results = 5
+
+    try:
+        results = DDGS().images(query, max_results=max_results)
+    except Exception as e:
+        return TaskResult(task=task, stderr=f"image search failed: {e}", returncode=1)
+
+    trimmed = [
+        {
+            "title": r.get("title", ""),
+            "image_url": r.get("image", ""),
+            "thumbnail": r.get("thumbnail", ""),
+            "width": r.get("width"),
+            "height": r.get("height"),
+        }
+        for r in results
+    ]
+    output = json.dumps(trimmed, ensure_ascii=False, indent=2)
+    session.web_cache[cache_key] = output
+    return TaskResult(task=task, stdout=output, returncode=0)
+
+
 def web_read(task: Task, session: SessionState) -> TaskResult:
     url = str(task.params.get("url") or task.name).strip()
     if not url:

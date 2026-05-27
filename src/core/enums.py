@@ -11,6 +11,7 @@ class ActionTypeEnum(str, Enum):
     SEARCH_KNOWLEDGE = "search_knowledge"
     INDEX_KNOWLEDGE = "index_knowledge"
     WEB_SEARCH = "web_search"
+    IMAGE_SEARCH = "image_search"
     WEB_READ = "web_read"
     HTTP_REQUEST = "http_request"
     MCP_CALL = "mcp_call"

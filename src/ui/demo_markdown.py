@@ -7,7 +7,7 @@ import sys
 
 from PySide6.QtWidgets import QApplication, QVBoxLayout, QWidget
 
-from ui.status_card import _ImageBrowser, _md_to_html
+from ui.status_card import _ReplyBrowser, _md_to_html
 
 _SAMPLE = """\
 # Heading 1
@@ -92,7 +92,7 @@ def main() -> None:
     layout = QVBoxLayout(win)
     layout.setContentsMargins(16, 16, 16, 16)
 
-    browser = _ImageBrowser()
+    browser = _ReplyBrowser()
     browser.setOpenExternalLinks(True)
     browser.setStyleSheet("""
         QTextBrowser {

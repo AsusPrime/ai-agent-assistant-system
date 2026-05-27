@@ -35,6 +35,7 @@ class Task(BaseModel):
             ActionTypeEnum.SEARCH_KNOWLEDGE,
             ActionTypeEnum.INDEX_KNOWLEDGE,
             ActionTypeEnum.WEB_SEARCH,
+            ActionTypeEnum.IMAGE_SEARCH,
             ActionTypeEnum.WEB_READ,
             ActionTypeEnum.HTTP_REQUEST,
             ActionTypeEnum.MCP_CALL,

@@ -5,7 +5,7 @@ from tools.handlers import open_app, read_file, run_command, run_skill, write_fi
 from tools.mcp_handler import mcp_call
 from tools.rag_handler import index_knowledge, search_knowledge
 from tools.system_control import system_control
-from tools.web_handlers import web_read, web_search
+from tools.web_handlers import image_search, web_read, web_search
 
 TOOL_REGISTRY: dict[str, Callable] = {
     "open_app": open_app,
@@ -16,6 +16,7 @@ TOOL_REGISTRY: dict[str, Callable] = {
     "search_knowledge": search_knowledge,
     "index_knowledge": index_knowledge,
     "web_search": web_search,
+    "image_search": image_search,
     "web_read": web_read,
     "http_request": http_request,
     "mcp_call": mcp_call,

@@ -44,9 +44,10 @@ def build_system_prompt(mcp_tools_section: str = "") -> str:
         "FORMATTING: The UI renders Markdown. Always format chat replies using standard Markdown syntax. "
         "Use **bold**, *italic*, ~~strikethrough~~, `inline code`, ```code blocks```, "
         "# headings, > blockquotes, - lists, [links](url), | tables |, --- horizontal rules, - [x] task lists. "
-        "Images: use ![alt text](url) to embed images. The UI will display images from URLs. "
-        "When the user asks for visual content or when an image would be helpful (e.g. diagrams, photos, logos), "
-        "include relevant image URLs using Markdown image syntax. "
+        "IMAGES: NEVER invent or guess image URLs. "
+        'To include images, FIRST use action=\'image_search\' with params={"query": "..."} to find real image URLs. '
+        "It returns JSON with 'image_url' fields. THEN in the next chat step, use ONLY those exact URLs: ![alt](image_url). "
+        "NEVER modify or construct URLs yourself. "
         "NEVER use HTML tags (<b>, <i>, <span>, etc.), BBCode ([b], [i], etc.), LaTeX ($ $), or ANSI escape codes. "
         "ONLY standard Markdown is supported. "
         'CORRECT example: {"tasks": [{"action": "chat", "name": "Hello! I am your AI assistant. How can I help?", "params": {}}], "reasoning": ""}\n'

@@ -1,3 +1,4 @@
+import re
 from typing import Callable
 
 from config import settings
@@ -310,13 +311,47 @@ class AssistantCore:
 # -- module-level helpers ------------------------------------------------
 
 
+_MD_IMG_RE = re.compile(r"!\[([^\]]*)\]\([^)]+\)")
+
+
+def _fix_image_urls(text: str) -> str:
+    matches = list(_MD_IMG_RE.finditer(text))
+    if not matches:
+        return text
+
+    try:
+        from ddgs import DDGS
+
+        ddgs = DDGS()
+    except Exception:
+        return _MD_IMG_RE.sub(r"", text)
+
+    for m in matches:
+        alt = m.group(1).strip()
+        query = alt or "image"
+        try:
+            results = ddgs.images(query, max_results=1)
+            if results:
+                real_url = results[0].get("image", "")
+                if real_url:
+                    text = text.replace(m.group(0), f"![{alt}]({real_url})", 1)
+                    continue
+        except Exception:
+            pass
+        text = text.replace(m.group(0), "", 1)
+
+    return text
+
+
 def _extract_chat_reply(plan: Plan) -> str:
     name = plan.tasks[0].name
     if " " in name and len(name) > 20:
-        return name
-    if plan.reasoning and len(plan.reasoning) > len(name):
-        return plan.reasoning
-    return name
+        reply = name
+    elif plan.reasoning and len(plan.reasoning) > len(name):
+        reply = plan.reasoning
+    else:
+        reply = name
+    return _fix_image_urls(reply)
 
 
 def _unmask_str(s: str, mapping: dict[str, str]) -> str:

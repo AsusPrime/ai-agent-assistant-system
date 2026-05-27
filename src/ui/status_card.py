@@ -177,35 +177,53 @@ class TaskCard(QWidget):
 
 
 _IMG_SRC_RE = re.compile(r'<img\s[^>]*src="([^"]+)"', re.IGNORECASE)
+_IMG_TAG_RE = re.compile(r"<img\s[^>]*/?\s*>", re.IGNORECASE)
 
 
-class _ImageBrowser(QTextBrowser):
+def _strip_all_imgs(html: str) -> tuple[str, dict[str, str]]:
+    placeholders: dict[str, str] = {}
+    idx = 0
+    for m in _IMG_SRC_RE.finditer(html):
+        src = m.group(1)
+        url = QUrl(src)
+        if url.scheme() in ("http", "https") and src not in placeholders.values():
+            key = f"__IMG_PLACEHOLDER_{idx}__"
+            placeholders[key] = src
+            idx += 1
+    cleaned = _IMG_TAG_RE.sub("", html)
+    return cleaned, placeholders
+
+
+class _ReplyBrowser(QTextBrowser):
     _MAX_IMG_WIDTH = 380
+
+    content_changed = Signal()
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self._nam = QNetworkAccessManager(self)
-        self._pending: set[str] = set()
-        self._loaded: set[str] = set()
+        self._pending: dict[str, str] = {}
+        self._clean_html: str = ""
+        self._img_cache: dict[str, QImage] = {}
 
     def setHtml(self, html: str) -> None:
-        super().setHtml(html)
-        for m in _IMG_SRC_RE.finditer(html):
-            src = m.group(1)
-            if src in self._loaded or src in self._pending:
-                continue
-            url = QUrl(src)
-            if url.scheme() not in ("http", "https"):
-                continue
-            self._pending.add(src)
-            req = QNetworkRequest(url)
-            reply = self._nam.get(req)
-            reply.finished.connect(
-                lambda _r=reply, _u=url, _s=src: self._on_loaded(_r, _u, _s)
-            )
+        clean, placeholders = _strip_all_imgs(html)
+        self._clean_html = clean
+        super().setHtml(clean)
 
-    def _on_loaded(self, reply: QNetworkReply, url: QUrl, src: str) -> None:
-        self._pending.discard(src)
+        for key, src in placeholders.items():
+            if src in self._img_cache:
+                self._insert_img(src)
+                continue
+            if src in self._pending.values():
+                continue
+            self._pending[key] = src
+            req = QNetworkRequest(QUrl(src))
+            reply = self._nam.get(req)
+            reply.finished.connect(lambda _r=reply, _s=src: self._on_loaded(_r, _s))
+
+    def _on_loaded(self, reply: QNetworkReply, src: str) -> None:
+        self._pending = {k: v for k, v in self._pending.items() if v != src}
 
         if reply.error() != QNetworkReply.NetworkError.NoError:
             reply.deleteLater()
@@ -223,13 +241,24 @@ class _ImageBrowser(QTextBrowser):
                 self._MAX_IMG_WIDTH, Qt.TransformationMode.SmoothTransformation
             )
 
-        self._loaded.add(src)
+        self._img_cache[src] = img
+        self._insert_img(src)
+
+    def _insert_img(self, src: str) -> None:
+        img = self._img_cache.get(src)
+        if not img:
+            return
+        url = QUrl(src)
         self.document().addResource(
             int(QTextDocument.ResourceType.ImageResource), url, img
         )
+        img_tag = f'<br><img src="{src}" width="{img.width()}" /><br>'
+        html_with_img = self._clean_html + img_tag
         cursor_pos = self.verticalScrollBar().value()
-        super().setHtml(self.toHtml())
+        super().setHtml(html_with_img)
+        self._clean_html = html_with_img
         self.verticalScrollBar().setValue(cursor_pos)
+        self.content_changed.emit()
 
 
 class StatusPanel(QWidget):
@@ -282,7 +311,7 @@ class StatusPanel(QWidget):
         self._buttons_widget.hide()
         self._layout.addWidget(self._buttons_widget)
 
-        self._reply_browser = _ImageBrowser()
+        self._reply_browser = _ReplyBrowser()
         self._reply_browser.setFont(QFont(FONT_FAMILY, 8))
         self._reply_browser.setOpenExternalLinks(True)
         self._reply_browser.setStyleSheet("""
@@ -308,8 +337,8 @@ class StatusPanel(QWidget):
         self._reply_browser.setSizePolicy(
             QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum
         )
-        self._reply_browser.setMaximumHeight(200)
         self._reply_browser.hide()
+        self._reply_browser.content_changed.connect(self._update_reply_height)
         self._layout.addWidget(self._reply_browser)
 
     def clear(self) -> None:
@@ -338,12 +367,15 @@ class StatusPanel(QWidget):
     def set_font_size(self, size: int) -> None:
         self._font_size = max(6, min(size, 24))
 
+    def _update_reply_height(self) -> None:
+        doc_height = int(self._reply_browser.document().size().height()) + 8
+        self._reply_browser.setFixedHeight(doc_height)
+
     def set_reply(self, text: str) -> None:
         if text:
             html = _md_to_html(text, self._font_size)
             self._reply_browser.setHtml(html)
-            doc_height = int(self._reply_browser.document().size().height()) + 8
-            self._reply_browser.setFixedHeight(min(doc_height, 200))
+            self._update_reply_height()
             self._reply_browser.show()
         else:
             self._reply_browser.hide()

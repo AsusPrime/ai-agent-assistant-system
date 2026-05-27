@@ -160,6 +160,7 @@ class FloatingBar(QWidget):
 
         self._status_panel = StatusPanel(self._container)
         self._status_panel.hide()
+        self._status_panel._reply_browser.content_changed.connect(self._adjust_height)
         main_layout.addWidget(self._status_panel)
 
         self._settings_window = SettingsWindow()
