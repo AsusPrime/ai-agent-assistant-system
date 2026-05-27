@@ -46,7 +46,6 @@ class Task(BaseModel):
             wl = json.load(f)
         mapping = {
             ActionTypeEnum.OPEN_APP: wl["allowed_apps"],
-            ActionTypeEnum.RUN_SKILL: wl["allowed_scripts"],
         }
         allowed = mapping[self.action]
         if self.name not in allowed:

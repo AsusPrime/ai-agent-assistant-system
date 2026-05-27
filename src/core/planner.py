@@ -12,7 +12,6 @@ from infrastructure.llm_client import get_model
 _WHITELIST_PATH = os.path.join(
     os.path.dirname(__file__), "..", "tools", "whitelist.json"
 )
-_SKILLS_DIR = os.path.join(os.path.dirname(__file__), "..", "skills")
 
 
 def build_system_prompt(mcp_tools_section: str = "") -> str:
@@ -21,9 +20,6 @@ def build_system_prompt(mcp_tools_section: str = "") -> str:
     os_info = f"{platform.system()} {platform.release()}"
     auto_cmds = wl["allowed_commands"]
     auto_apps = wl["allowed_apps"]
-    scripts = [
-        s for s in wl["allowed_scripts"] if os.path.isfile(os.path.join(_SKILLS_DIR, s))
-    ]
     base = (
         f"You are an AI system orchestrator running on {os_info}. "
         "Return ONLY a Plan object with a list of Task steps. Never explain outside the Plan. "
@@ -32,7 +28,6 @@ def build_system_prompt(mcp_tools_section: str = "") -> str:
         "Examples: 'Searching for the latest video', 'Installing a tool', 'Downloading the file', 'Opening the browser'. "
         f"Auto-approved apps (no confirmation needed): {auto_apps}. "
         f"Auto-approved commands (no confirmation needed): {auto_cmds}. "
-        f"Allowed scripts (these are the ONLY scripts that exist on disk — never invoke any other script name): {scripts}. "
         "You MAY use any shell command beyond the auto-approved list — the user will be asked to confirm those. "
         "IMPORTANT: before using a command that might not be installed (e.g. python3, node, git, brew, ffmpeg), "
         "add a verification step first: action='run_command', name='which', params={\"args\": [\"<cmd>\"]}. "
@@ -59,7 +54,6 @@ def build_system_prompt(mcp_tools_section: str = "") -> str:
         "For 'cd', always pass the target directory in params as {\"path\": \"/absolute/or/~/relative/path\"} — never use 'args' for cd. "
         'For all other commands, pass arguments in params as {"args": ["arg1", "arg2"]}. '
         "CRITICAL: the value of 'args' MUST always be a JSON array of strings — never a number, boolean, or other scalar. "
-        "If the user wants to run a script/skill, use action='run_skill' and set 'name' to the script from the allowed list. "
         "Add verification steps after state-changing commands: after 'cd <dir>' add 'pwd'; after 'mkdir' add 'pwd'. "
         "To create or overwrite a file, use action='write_file', set 'name' to the filename, "
         "params={'path': '/absolute/or/~/path/to/file', 'content': '<file content>'}. "

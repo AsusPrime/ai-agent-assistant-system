@@ -1,6 +1,5 @@
 import json
 import os
-import subprocess
 
 from core.schemas import Task, TaskResult
 from core.session import SessionState
@@ -21,9 +20,6 @@ def _coerce_args(raw) -> list[str]:
     if raw is not None:
         return [str(raw)]
     return []
-
-
-_SKILLS_DIR = os.path.join(os.path.dirname(__file__), "..", "skills")
 
 
 def open_app(task: Task, session: SessionState) -> TaskResult:
@@ -80,17 +76,3 @@ def read_file(task: Task, session: SessionState) -> TaskResult:
     with open(path, "r") as f:
         content = f.read()
     return TaskResult(task=task, stdout=content, returncode=0)
-
-
-def run_skill(task: Task, session: SessionState) -> TaskResult:
-    args = _coerce_args(task.params.get("args", []))
-    skill_path = os.path.join(_SKILLS_DIR, task.name)
-    result = subprocess.run(
-        ["python3", skill_path] + args, capture_output=True, text=True, cwd=session.cwd
-    )
-    return TaskResult(
-        task=task,
-        stdout=result.stdout,
-        stderr=result.stderr,
-        returncode=result.returncode,
-    )
