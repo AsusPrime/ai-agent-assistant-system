@@ -92,6 +92,7 @@ class AssistantCore:
         return input(prompt).strip().lower() == "y"
 
     def process_query(self, user_input: str) -> QueryResult:
+        self._print(f"[LOG] Query received: {user_input[:80]}...")
         masked_input, pii_map = self.guard.mask(user_input)
         self.session.pii_map.update(pii_map)
         if pii_map:
@@ -107,16 +108,20 @@ class AssistantCore:
     def _react_loop(self, user_input: str, masked_input: str) -> QueryResult:
         observations: list[TaskResult] = []
         max_iter = settings.REACT_MAX_ITERATIONS
+        self._print(f"[LOG] Starting ReAct loop (max {max_iter} iterations)")
 
         for iteration in range(max_iter):
+            self._print(f"[LOG] ReAct iteration {iteration + 1}: planning next step...")
             prompt = self._build_react_prompt(masked_input, observations)
             plan = self._get_plan(prompt)
             if plan is None:
+                self._print("[LOG] Planner returned None, stopping loop")
                 break
             plan = _unmask_plan(plan, self.session.pii_map)
 
             if len(plan.tasks) == 1 and plan.tasks[0].action == ActionTypeEnum.CHAT:
                 reply = _extract_chat_reply(plan)
+                self._print("[LOG] Chat reply received, loop complete")
                 return QueryResult(reply=reply, task_results=observations)
 
             task = plan.tasks[0]
@@ -167,6 +172,7 @@ class AssistantCore:
 
     def _get_plan(self, masked_input: str) -> Plan | None:
         prev_len = len(self.session.message_history)
+        self._print(f"[LOG] Sending to LLM (history: {prev_len} messages)")
         try:
             result = self._run_planner(masked_input)
         except Exception as e:
@@ -177,7 +183,9 @@ class AssistantCore:
         new_msgs = self.session.message_history[prev_len:]
         if new_msgs:
             self.msg_repo.save_turn(self.session.session_id, new_msgs)
-        return result.output
+        plan = result.output
+        self._print(f"[LOG] LLM returned {len(plan.tasks)} task(s)")
+        return plan
 
     def _run_planner(self, prompt: str):
         try:
@@ -227,8 +235,11 @@ class AssistantCore:
         user_input: str,
         observations: list[dict],
     ) -> tuple[Task | None, str | None]:
+        self._print(f"[LOG] react_step called, {len(observations)} prior observations")
         masked_input, pii_map = self.guard.mask(user_input)
         self.session.pii_map.update(pii_map)
+        if pii_map:
+            self._print(f"[Privacy] Masked {len(pii_map)} sensitive pattern(s)")
 
         obs_results = [
             TaskResult(
@@ -244,17 +255,22 @@ class AssistantCore:
         ]
 
         prompt = self._build_react_prompt(masked_input, obs_results)
+        self._print("[LOG] Calling planner for next step...")
         plan = self._get_plan(prompt)
         if plan is None:
+            self._print("[LOG] Planner returned None")
             return None, None
 
         plan = _unmask_plan(plan, self.session.pii_map)
 
         if len(plan.tasks) == 1 and plan.tasks[0].action == ActionTypeEnum.CHAT:
             reply = _extract_chat_reply(plan)
+            self._print("[LOG] Chat reply received, done")
             return None, reply
 
-        return plan.tasks[0], None
+        task = plan.tasks[0]
+        self._print(f"[LOG] Next task: {task.action.value} | {task.name}")
+        return task, None
 
     def execute_single(self, task_dict: dict) -> TaskResult:
         task = Task(
@@ -262,7 +278,10 @@ class AssistantCore:
             name=task_dict["name"],
             params=task_dict.get("params", {}),
         )
-        return self.engine.run_single(task, pre_approved=True)
+        self._print(f"[LOG] Executing: {task.action.value} | {task.name}")
+        result = self.engine.run_single(task, pre_approved=True)
+        self._print(f"[LOG] Result: {result.status} ({result.duration_ms}ms)")
+        return result
 
     # -- summarization ---------------------------------------------------
 

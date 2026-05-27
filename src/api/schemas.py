@@ -154,6 +154,7 @@ class SettingsResponse(BaseModel):
     WEB_TIMEOUT: float
     HTTP_TIMEOUT: float
     MCP_CALL_TIMEOUT: float
+    UI_SHOW_LOGS: bool
     UI_TAMAGOTCHI: bool
     UI_AUTO_APPROVE: bool
     UI_MAX_VISIBLE_TASKS: int
@@ -172,6 +173,7 @@ class SettingsUpdateRequest(BaseModel):
     WEB_TIMEOUT: float | None = None
     HTTP_TIMEOUT: float | None = None
     MCP_CALL_TIMEOUT: float | None = None
+    UI_SHOW_LOGS: bool | None = None
     UI_TAMAGOTCHI: bool | None = None
     UI_AUTO_APPROVE: bool | None = None
     UI_MAX_VISIBLE_TASKS: int | None = None

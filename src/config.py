@@ -45,6 +45,7 @@ class Settings(BaseSettings):
     PRIVACY_ENTROPY_HEX: float = 4.0
     PRIVACY_MIN_SECRET_LEN: int = 8
 
+    UI_SHOW_LOGS: bool = False
     UI_TAMAGOTCHI: bool = True
     UI_AUTO_APPROVE: bool = False
     UI_MAX_VISIBLE_TASKS: int = 5

@@ -379,3 +379,85 @@ class StatusPanel(QWidget):
             self._reply_browser.show()
         else:
             self._reply_browser.hide()
+
+
+class LogPanel(QWidget):
+    def __init__(self, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self._layout = QVBoxLayout(self)
+        self._layout.setContentsMargins(0, 2, 0, 0)
+        self._layout.setSpacing(0)
+
+        self._header = QPushButton("▶ Logs")
+        self._header.setFont(QFont(FONT_FAMILY, 7, QFont.Weight.Bold))
+        self._header.setStyleSheet("""
+            QPushButton {
+                background: transparent; color: #555; border: none;
+                text-align: left; padding: 1px 4px;
+            }
+            QPushButton:hover { color: #06d6a0; }
+        """)
+        self._header.setFixedHeight(16)
+        self._header.clicked.connect(self._toggle)
+        self._layout.addWidget(self._header)
+
+        self._browser = QTextBrowser(self)
+        self._browser.setFont(QFont(FONT_FAMILY, 7))
+        self._browser.setOpenExternalLinks(False)
+        self._browser.setStyleSheet("""
+            QTextBrowser {
+                color: #808090; background: #1a1a28; border: none;
+                padding: 2px 4px;
+            }
+            QScrollBar:vertical {
+                width: 4px; background: transparent;
+            }
+            QScrollBar::handle:vertical {
+                background: #3a3a5e; border-radius: 2px; min-height: 12px;
+            }
+            QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
+                height: 0px;
+            }
+        """)
+        self._browser.setFixedHeight(0)
+        self._browser.hide()
+        self._layout.addWidget(self._browser)
+
+        self._expanded = False
+        self._lines: list[str] = []
+
+    def _toggle(self) -> None:
+        self._expanded = not self._expanded
+        if self._expanded:
+            self._header.setText("▼ Logs")
+            self._browser.show()
+            self._update_height()
+        else:
+            self._header.setText("▶ Logs")
+            self._browser.setFixedHeight(0)
+            self._browser.hide()
+
+    def _update_height(self) -> None:
+        n = len(self._lines)
+        h = min(max(n * 14, 40), 120)
+        self._browser.setFixedHeight(h)
+
+    def append_messages(self, messages: list[str]) -> None:
+        for msg in messages:
+            self._lines.append(msg)
+        if self._lines:
+            count = self._header.text().split("(")[0].rstrip()
+            self._header.setText(f"{count} ({len(self._lines)})")
+        self._browser.setPlainText("\n".join(self._lines))
+        if self._expanded:
+            self._update_height()
+        sb = self._browser.verticalScrollBar()
+        sb.setValue(sb.maximum())
+
+    def clear(self) -> None:
+        self._lines.clear()
+        self._browser.clear()
+        self._browser.setFixedHeight(0)
+        self._expanded = False
+        self._header.setText("▶ Logs")
+        self._browser.hide()

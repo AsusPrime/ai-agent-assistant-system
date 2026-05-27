@@ -54,6 +54,7 @@ class SingleExecResult:
     returncode: int = 0
     skipped: bool = False
     duration_ms: int = 0
+    messages: list[str] = field(default_factory=list)
     error: str | None = None
 
 
@@ -119,6 +120,7 @@ class _ExecSingleWorker(QObject):
                 returncode=data.get("returncode", 0),
                 skipped=data.get("skipped", False),
                 duration_ms=data.get("duration_ms", 0),
+                messages=data.get("messages", []),
             )
         except httpx.ConnectError:
             result = SingleExecResult(error="Cannot connect to API.")

@@ -18,7 +18,7 @@ from ui.api_client import ApiClient, SingleExecResult, StepResult
 from ui.emotions import Emotion, get_time_of_day, TimeOfDay
 from ui.input_bar import InputBar
 from ui.settings_panel import SettingsWindow
-from ui.status_card import StatusPanel
+from ui.status_card import LogPanel, StatusPanel
 from ui.tamagotchi import TamagotchiWidget
 from ui.weather import WeatherState, fetch_weather
 
@@ -57,6 +57,7 @@ class FloatingBar(QWidget):
         self._completed_cards: list[dict] = []
 
         self._ui_tamagotchi = True
+        self._ui_show_logs = False
         self._ui_auto_approve = False
         self._ui_max_visible = 5
         self._ui_summary_delay = 1500
@@ -163,6 +164,10 @@ class FloatingBar(QWidget):
         self._status_panel._reply_browser.content_changed.connect(self._adjust_height)
         main_layout.addWidget(self._status_panel)
 
+        self._log_panel = LogPanel(self._container)
+        self._log_panel.hide()
+        main_layout.addWidget(self._log_panel)
+
         self._settings_window = SettingsWindow()
 
         self._api = ApiClient()
@@ -202,10 +207,14 @@ class FloatingBar(QWidget):
     def _apply_settings(self, data: dict) -> None:
         was_auto = self._ui_auto_approve
         self._ui_tamagotchi = data.get("UI_TAMAGOTCHI", True)
+        self._ui_show_logs = data.get("UI_SHOW_LOGS", False)
         self._ui_auto_approve = data.get("UI_AUTO_APPROVE", False)
         self._ui_max_visible = data.get("UI_MAX_VISIBLE_TASKS", 5)
         self._ui_summary_delay = data.get("UI_SUMMARY_DELAY_MS", 1500)
         self._tamagotchi.setVisible(self._ui_tamagotchi)
+        if not self._ui_show_logs:
+            self._log_panel.hide()
+            self._log_panel.clear()
 
         font_size = data.get("UI_FONT_SIZE", 9)
         self._status_panel.set_font_size(font_size)
@@ -239,8 +248,11 @@ class FloatingBar(QWidget):
 
         self._settings_window.hide()
         self._status_panel.clear()
+        self._log_panel.clear()
         self._status_panel.show()
         self._separator.show()
+        if self._ui_show_logs:
+            self._log_panel.show()
         if self._ui_tamagotchi:
             self._tamagotchi.set_emotion(Emotion.THINKING)
 
@@ -248,6 +260,10 @@ class FloatingBar(QWidget):
         self._adjust_height()
 
     def _on_step_finished(self, result: StepResult) -> None:
+        if self._ui_show_logs and result.messages:
+            self._log_panel.append_messages(result.messages)
+            self._adjust_height()
+
         if result.error:
             self._input.set_busy(False)
             self._tamagotchi.set_emotion(Emotion.SAD)
@@ -341,6 +357,10 @@ class FloatingBar(QWidget):
         self._adjust_height()
 
     def _on_exec_single_finished(self, result: SingleExecResult) -> None:
+        if self._ui_show_logs and result.messages:
+            self._log_panel.append_messages(result.messages)
+            self._adjust_height()
+
         if result.error:
             self._completed_cards.append({"name": result.error, "status": "error"})
             self._status_panel.set_tasks(self._completed_cards, self._ui_max_visible)
@@ -385,6 +405,8 @@ class FloatingBar(QWidget):
             return
         self._status_panel.clear()
         self._status_panel.hide()
+        self._log_panel.clear()
+        self._log_panel.hide()
         self._separator.hide()
         self._adjust_height()
 

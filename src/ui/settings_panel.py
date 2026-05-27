@@ -82,6 +82,7 @@ _FIELD_DEFS: list[dict] = [
         "type": "float",
         "group": "Network",
     },
+    {"key": "UI_SHOW_LOGS", "label": "Show Logs", "type": "bool", "group": "UI"},
     {"key": "UI_TAMAGOTCHI", "label": "Show Tamagotchi", "type": "bool", "group": "UI"},
     {
         "key": "UI_AUTO_APPROVE",
@@ -396,8 +397,23 @@ class SettingsWindow(QWidget):
         inner.addWidget(self._panel)
 
     def load_and_show(self, parent_pos: QPoint) -> None:
+        from PySide6.QtWidgets import QApplication
+
         self._panel.load_settings()
-        self.move(parent_pos.x() - self._WIDTH - 8, parent_pos.y())
+        x = parent_pos.x() - self._WIDTH - 8
+        y = parent_pos.y()
+        screen = QApplication.screenAt(parent_pos)
+        if screen is None:
+            screen = QApplication.primaryScreen()
+        if screen:
+            geo = screen.availableGeometry()
+            if x < geo.x():
+                x = parent_pos.x() + 420 + 8
+            if y + self._HEIGHT > geo.bottom():
+                y = geo.bottom() - self._HEIGHT
+            x = max(x, geo.x())
+            y = max(y, geo.y())
+        self.move(x, y)
         self.show()
         self.raise_()
 
