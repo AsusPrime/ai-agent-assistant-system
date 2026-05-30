@@ -14,6 +14,24 @@ _WHITELIST_PATH = os.path.join(
 )
 
 
+def _format_available_recipes() -> str:
+    try:
+        from core.recipe_loader import list_recipes_detailed
+
+        recipes = list_recipes_detailed()
+    except Exception:
+        recipes = []
+    if not recipes:
+        return "Currently no saved recipes exist.\n"
+    lines = ["Available recipes:"]
+    for r in recipes:
+        lines.append(
+            f'  - id="{r.id}", title="{r.title}", description="{r.description}"'
+        )
+    lines.append("")
+    return "\n".join(lines)
+
+
 def build_system_prompt(mcp_tools_section: str = "") -> str:
     with open(_WHITELIST_PATH) as f:
         wl = json.load(f)
@@ -36,6 +54,13 @@ def build_system_prompt(mcp_tools_section: str = "") -> str:
         "return EXACTLY ONE Task with action='chat' and name=<your full reply text to the user>. "
         "CRITICAL RULE FOR CHAT: the 'name' field MUST contain the ENTIRE reply message as a human-readable sentence/paragraph. "
         "NEVER put a label, identifier, function name, or category in 'name'. "
+        "USER-FRIENDLY OUTPUT: Your audience is regular people, not developers or sysadmins. "
+        "When presenting results from commands, tools, or any technical source: "
+        "always translate raw output into clear, simple language. "
+        "Remove technical jargon, column headers, raw paths, and internal identifiers. "
+        "Present only the meaningful information the user actually cares about. "
+        "Use natural sentences, not tables or code dumps. "
+        "If the output contains numbers with units, convert to the most intuitive form. "
         "FORMATTING: The UI renders Markdown. Always format chat replies using standard Markdown syntax. "
         "Use **bold**, *italic*, ~~strikethrough~~, `inline code`, ```code blocks```, "
         "# headings, > blockquotes, - lists, [links](url), | tables |, --- horizontal rules, - [x] task lists. "
@@ -90,6 +115,29 @@ def build_system_prompt(mcp_tools_section: str = "") -> str:
         'Example: {"action": "system_control", "name": "screenshot", "params": {"path": "~/Desktop/screen.png"}, "description": "Taking a screenshot"}\n'
         "Use system_control for brightness, volume, screenshots, power, Wi-Fi, Bluetooth, window management, clipboard, notifications, and system info.\n"
         "\n"
+        "RECIPES:\n"
+        "Recipes are reusable saved sequences of tasks that can be created, listed, and run.\n"
+        "action='list_recipes' — returns a JSON array of available recipes with id, title, description. No params needed.\n"
+        "action='save_recipe' — saves a new recipe. params={'name': '<file_id>', 'title': '<Human-readable title>', "
+        "'description': '<What this recipe does>', 'tasks': '<JSON array of task objects>', 'reasoning': '<internal notes>'}.\n"
+        "  'name' is the file identifier (snake_case, e.g. 'morning_routine').\n"
+        "  'title' is the human-readable display name (e.g. 'Morning Routine').\n"
+        "  'description' briefly explains what the recipe does.\n"
+        '  Each task object in the array has: {"action": "...", "name": "...", "params": {...}}.\n'
+        "  The 'tasks' value MUST be a JSON string (stringified array), not a raw array.\n"
+        "action='run_recipe' — runs a saved recipe by its id. params={'name': '<recipe_id>'}.\n"
+        'Example save: {"action": "save_recipe", "name": "save_recipe", '
+        '"params": {"name": "morning_routine", "title": "Morning Routine", '
+        '"description": "Opens Discord and Safari to start the day", '
+        '"tasks": "[{\\"action\\": \\"open_app\\", \\"name\\": \\"discord\\", \\"params\\": {}}, '
+        '{\\"action\\": \\"open_app\\", \\"name\\": \\"safari\\", \\"params\\": {}}]"}, '
+        '"description": "Saving morning recipe"}\n'
+        'Example run: {"action": "run_recipe", "name": "run_recipe", "params": {"name": "morning_routine"}, "description": "Running morning recipe"}\n'
+        "If the user asks to create/save a recipe — use save_recipe. Always provide title and description.\n"
+        "If the user asks to run/execute a recipe — use run_recipe with the recipe id.\n"
+        "If the user asks what recipes exist — use list_recipes.\n"
+        + _format_available_recipes()
+        + "\n"
         "STEP-BY-STEP EXECUTION MODE:\n"
         "You operate in a think-act-observe loop. You will be called repeatedly.\n"
         "Each call, return a Plan with ONLY ONE Task — the next action to perform.\n"

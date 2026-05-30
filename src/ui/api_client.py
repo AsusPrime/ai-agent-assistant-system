@@ -265,6 +265,61 @@ class _QueryWorker(QObject):
         self.finished.emit(result)
 
 
+@dataclass
+class RecipeRunResult:
+    tasks: list[TaskResult] = field(default_factory=list)
+    messages: list[str] = field(default_factory=list)
+    error: str | None = None
+
+
+class _RecipeRunWorker(QObject):
+    finished = Signal(object)
+
+    def __init__(self, base_url: str, name: str) -> None:
+        super().__init__()
+        self._base_url = base_url
+        self._name = name
+
+    def run(self) -> None:
+        try:
+            with httpx.Client(timeout=120.0) as client:
+                resp = client.post(
+                    f"{self._base_url}/recipes/{self._name}/run",
+                )
+                resp.raise_for_status()
+                data = resp.json()
+
+            tasks = [
+                TaskResult(
+                    action=t.get("action", ""),
+                    name=t.get("name", ""),
+                    status=t.get("status", ""),
+                    stdout=t.get("stdout", ""),
+                    stderr=t.get("stderr", ""),
+                )
+                for t in data.get("tasks", [])
+            ]
+            result = RecipeRunResult(
+                tasks=tasks,
+                messages=data.get("messages", []),
+            )
+        except httpx.ConnectError:
+            result = RecipeRunResult(error="Cannot connect to API.")
+        except httpx.HTTPStatusError as e:
+            detail = ""
+            try:
+                detail = e.response.json().get("detail", "")
+            except Exception:
+                pass
+            result = RecipeRunResult(
+                error=detail or f"API error: {e.response.status_code}"
+            )
+        except Exception as e:
+            result = RecipeRunResult(error=str(e))
+
+        self.finished.emit(result)
+
+
 class ApiClient(QObject):
     query_started = Signal(str)
     query_finished = Signal(object)
@@ -272,6 +327,7 @@ class ApiClient(QObject):
     execute_finished = Signal(object)
     step_finished = Signal(object)
     exec_single_finished = Signal(object)
+    recipe_run_finished = Signal(object)
 
     def __init__(
         self, base_url: str = "http://127.0.0.1:8000", parent: QObject | None = None
@@ -364,6 +420,20 @@ class ApiClient(QObject):
     def _on_exec_single_finished(self, result: SingleExecResult) -> None:
         self._cleanup_thread()
         self.exec_single_finished.emit(result)
+
+    def run_recipe(self, name: str) -> None:
+        if self.is_busy:
+            return
+        self._thread = QThread()
+        self._worker = _RecipeRunWorker(self._base_url, name)
+        self._worker.moveToThread(self._thread)
+        self._thread.started.connect(self._worker.run)
+        self._worker.finished.connect(self._on_recipe_run_finished)
+        self._thread.start()
+
+    def _on_recipe_run_finished(self, result: RecipeRunResult) -> None:
+        self._cleanup_thread()
+        self.recipe_run_finished.emit(result)
 
     def _cleanup_thread(self) -> None:
         if self._thread:

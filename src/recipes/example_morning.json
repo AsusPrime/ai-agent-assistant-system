@@ -1,4 +1,6 @@
 {
+  "title": "Morning Routine",
+  "description": "Opens Discord and Safari to start the day",
   "tasks": [
     {
       "action": "open_app",

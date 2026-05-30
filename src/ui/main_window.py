@@ -14,9 +14,10 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from ui.api_client import ApiClient, SingleExecResult, StepResult
+from ui.api_client import ApiClient, RecipeRunResult, SingleExecResult, StepResult
 from ui.emotions import Emotion, get_time_of_day, TimeOfDay
 from ui.input_bar import InputBar
+from ui.recipe_panel import RecipeWindow
 from ui.settings_panel import SettingsWindow
 from ui.status_card import LogPanel, StatusPanel
 from ui.tamagotchi import TamagotchiWidget
@@ -90,6 +91,8 @@ class FloatingBar(QWidget):
         bw = self._settings_btn.width()
         self._settings_btn.move(cw - bw - 6, 4)
         self._settings_btn.raise_()
+        self._recipe_btn.move(cw - bw * 2 - 10, 4)
+        self._recipe_btn.raise_()
 
     def _build_ui(self) -> None:
         self.setFixedWidth(self._WIDTH)
@@ -120,6 +123,18 @@ class FloatingBar(QWidget):
         main_layout = QVBoxLayout(self._container)
         main_layout.setContentsMargins(10, 8, 10, 8)
         main_layout.setSpacing(6)
+
+        self._recipe_btn = QPushButton("📋")
+        self._recipe_btn.setFont(QFont(FONT_FAMILY, 12))
+        self._recipe_btn.setFixedSize(24, 24)
+        self._recipe_btn.setStyleSheet("""
+            QPushButton {
+                background: transparent; color: #555; border: none;
+            }
+            QPushButton:hover { color: #06d6a0; }
+        """)
+        self._recipe_btn.setToolTip("Recipes")
+        self._recipe_btn.setParent(self._container)
 
         self._settings_btn = QPushButton("⚙")
         self._settings_btn.setFont(QFont(FONT_FAMILY, 14))
@@ -169,6 +184,7 @@ class FloatingBar(QWidget):
         main_layout.addWidget(self._log_panel)
 
         self._settings_window = SettingsWindow()
+        self._recipe_window = RecipeWindow()
 
         self._api = ApiClient()
 
@@ -186,6 +202,9 @@ class FloatingBar(QWidget):
         self._status_panel.denied.connect(self._on_deny)
         self._settings_btn.clicked.connect(self._toggle_settings)
         self._settings_window.settings_changed.connect(self._apply_settings)
+        self._recipe_btn.clicked.connect(self._toggle_recipes)
+        self._recipe_window.recipe_run.connect(self._on_recipe_run)
+        self._api.recipe_run_finished.connect(self._on_recipe_run_finished)
 
     def _load_ui_settings(self) -> None:
         try:
@@ -202,7 +221,69 @@ class FloatingBar(QWidget):
         if self._settings_window.isVisible():
             self._settings_window.hide()
         else:
+            self._recipe_window.hide()
             self._settings_window.load_and_show(self.pos())
+
+    def _toggle_recipes(self) -> None:
+        if self._recipe_window.isVisible():
+            self._recipe_window.hide()
+        else:
+            self._settings_window.hide()
+            self._recipe_window.load_and_show(self.pos())
+
+    def _on_recipe_run(self, name: str) -> None:
+        self._recipe_window.hide()
+        self._input.set_busy(True)
+        self._last_query = f"recipe: {name}"
+        self._observations = []
+        self._current_task = None
+        self._completed_cards = [
+            {"name": f"Running recipe: {name}", "status": "running"}
+        ]
+
+        self._status_panel.clear()
+        self._log_panel.clear()
+        self._status_panel.show()
+        self._separator.show()
+        self._status_panel.set_tasks(self._completed_cards, self._ui_max_visible)
+        if self._ui_tamagotchi:
+            self._tamagotchi.set_emotion(Emotion.THINKING)
+        self._adjust_height()
+
+        self._api.run_recipe(name)
+
+    def _on_recipe_run_finished(self, result: RecipeRunResult) -> None:
+        self._input.set_busy(False)
+
+        if result.error:
+            self._status_panel.set_tasks(
+                [{"name": result.error, "status": "error"}], self._ui_max_visible
+            )
+            self._tamagotchi.set_emotion(Emotion.SAD)
+            self._adjust_height()
+            return
+
+        cards = []
+        output_lines = []
+        for t in result.tasks:
+            cards.append({"name": t.name, "status": t.status.lower()})
+            if t.stdout.strip():
+                output_lines.append(f"**{t.name}**")
+                output_lines.append(f"```\n{t.stdout.strip()}\n```")
+
+        all_ok = all(t.status.lower() == "success" for t in result.tasks)
+        self._tamagotchi.set_emotion(Emotion.HAPPY if all_ok else Emotion.SAD)
+
+        self._status_panel.clear()
+        if output_lines:
+            self._status_panel.set_reply("\n".join(output_lines))
+        else:
+            self._status_panel.set_tasks(cards, self._ui_max_visible)
+
+        if self._ui_show_logs and result.messages:
+            self._log_panel.append_messages(result.messages)
+
+        self._adjust_height()
 
     def _apply_settings(self, data: dict) -> None:
         was_auto = self._ui_auto_approve

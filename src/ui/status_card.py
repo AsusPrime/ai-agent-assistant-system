@@ -268,6 +268,7 @@ class StatusPanel(QWidget):
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self._font_size: int = 9
+        self._last_reply_md: str = ""
         self._layout = QVBoxLayout()
         self._layout.setContentsMargins(0, 4, 0, 0)
         self._layout.setSpacing(3)
@@ -346,6 +347,7 @@ class StatusPanel(QWidget):
             self._layout.removeWidget(card)
             card.deleteLater()
         self._cards.clear()
+        self._last_reply_md = ""
         self._reply_browser.hide()
         self._buttons_widget.hide()
 
@@ -366,6 +368,11 @@ class StatusPanel(QWidget):
 
     def set_font_size(self, size: int) -> None:
         self._font_size = max(6, min(size, 24))
+        self._reply_browser.setFont(QFont(FONT_FAMILY, self._font_size))
+        if self._reply_browser.isVisible() and self._last_reply_md:
+            html = _md_to_html(self._last_reply_md, self._font_size)
+            self._reply_browser.setHtml(html)
+            self._update_reply_height()
 
     def _update_reply_height(self) -> None:
         doc_height = int(self._reply_browser.document().size().height()) + 8
@@ -373,11 +380,14 @@ class StatusPanel(QWidget):
 
     def set_reply(self, text: str) -> None:
         if text:
+            self._last_reply_md = text
+            self._reply_browser.setFont(QFont(FONT_FAMILY, self._font_size))
             html = _md_to_html(text, self._font_size)
             self._reply_browser.setHtml(html)
             self._update_reply_height()
             self._reply_browser.show()
         else:
+            self._last_reply_md = ""
             self._reply_browser.hide()
 
 

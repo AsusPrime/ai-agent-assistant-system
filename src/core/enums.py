@@ -15,3 +15,6 @@ class ActionTypeEnum(str, Enum):
     HTTP_REQUEST = "http_request"
     MCP_CALL = "mcp_call"
     SYSTEM_CONTROL = "system_control"
+    SAVE_RECIPE = "save_recipe"
+    RUN_RECIPE = "run_recipe"
+    LIST_RECIPES = "list_recipes"

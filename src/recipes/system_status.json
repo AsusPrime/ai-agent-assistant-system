@@ -1,0 +1,34 @@
+{
+  "title": "Стан системи",
+  "description": "Перевіряє стан системи: виводить поточну дату, вільне місце на диску та час роботи системи.",
+  "tasks": [
+    {
+      "action": "run_command",
+      "name": "date",
+      "description": "Виведення поточної дати",
+      "params": {
+        "args": []
+      }
+    },
+    {
+      "action": "run_command",
+      "name": "df",
+      "description": "Показ вільного місця на диску",
+      "params": {
+        "args": [
+          "-h"
+        ]
+      }
+    },
+    {
+      "action": "run_command",
+      "name": "uptime",
+      "description": "Виведення часу роботи системи",
+      "params": {
+        "args": []
+      }
+    }
+  ],
+  "reasoning": "",
+  "requirements": []
+}

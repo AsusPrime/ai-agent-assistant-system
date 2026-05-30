@@ -40,6 +40,9 @@ class Task(BaseModel):
             ActionTypeEnum.HTTP_REQUEST,
             ActionTypeEnum.MCP_CALL,
             ActionTypeEnum.SYSTEM_CONTROL,
+            ActionTypeEnum.SAVE_RECIPE,
+            ActionTypeEnum.RUN_RECIPE,
+            ActionTypeEnum.LIST_RECIPES,
         ):
             return self  # any command/file allowed; HITL is the safety net
         with open(_WHITELIST_PATH) as f:

@@ -119,8 +119,14 @@ class ExecuteSingleResponse(BaseModel):
 # --- Recipes ---
 
 
+class RecipeItem(BaseModel):
+    id: str
+    title: str
+    description: str = ""
+
+
 class RecipeListResponse(BaseModel):
-    recipes: list[str]
+    recipes: list[RecipeItem]
 
 
 class RequirementInput(BaseModel):

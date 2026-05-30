@@ -29,7 +29,7 @@ from api.schemas import (
 )
 from config import settings
 from core.assistant import AssistantCore
-from core.recipe_loader import Recipe, list_recipes, load_recipe, save_recipe
+from core.recipe_loader import Recipe, list_recipes_detailed, load_recipe, save_recipe
 from core.requirements import check_requirements
 from core.schemas import Plan, Task
 
@@ -265,7 +265,12 @@ async def execute_single(
 
 @app.get("/recipes", response_model=RecipeListResponse)
 async def get_recipes() -> RecipeListResponse:
-    return RecipeListResponse(recipes=list_recipes())
+    items = list_recipes_detailed()
+    return RecipeListResponse(
+        recipes=[
+            {"id": r.id, "title": r.title, "description": r.description} for r in items
+        ]
+    )
 
 
 @app.post("/recipes", status_code=201)

@@ -1,0 +1,37 @@
+{
+  "title": "Надіслати привітання від ШІ через Gmail",
+  "description": "Відправляє електронний лист з повідомленням 'Привіт від ШІ!' на asusprime003@gmail.com через Gmail. **Важливо:** Перед виконанням, вам потрібно буде вручну замінити `YOUR_APP_PASSWORD_HERE` у файлі `~/send_gmail.py` на ваш *пароль програми* Gmail. Докладніше про паролі програм: https://support.google.com/accounts/answer/185833?hl=uk",
+  "tasks": [
+    {
+      "action": "write_file",
+      "name": "send_gmail.py",
+      "description": "Створення тимчасового скрипту Python для відправлення пошти",
+      "params": {
+        "path": "~/send_gmail.py",
+        "content": "import smtplib\nfrom email.mime.text import MIMEText\n\nsender_email = \"asusprime003@gmail.com\"\nreceiver_email = \"asusprime003@gmail.com\" # Assuming the user wants to send to themselves for now.\n# User will need to replace this with their actual Gmail app password\n# See: https://support.google.com/accounts/answer/185833?hl=uk\npassword = \"rkua vlex unal xfnr\"\nsubject = \"Привіт від ШІ!\"\nbody = \"Привіт від ШІ!\"\n\nmsg = MIMEText(body, 'plain', 'utf-8')\nmsg['Subject'] = subject\nmsg['From'] = sender_email\nmsg['To'] = receiver_email\n\ntry:\n    with smtplib.SMTP_SSL('smtp.gmail.com', 465) as smtp:\n        smtp.login(sender_email, password)\n        smtp.send_message(msg)\n    print(\"Email sent successfully!\")\nexcept Exception as e:\n    print(f\"Error sending email: {e}\")"
+      }
+    },
+    {
+      "action": "run_command",
+      "name": "python3",
+      "description": "Виконання скрипту Python для відправлення пошти",
+      "params": {
+        "args": [
+          "~/send_gmail.py"
+        ]
+      }
+    },
+    {
+      "action": "run_command",
+      "name": "rm",
+      "description": "Видалення тимчасового скрипту Python",
+      "params": {
+        "args": [
+          "~/send_gmail.py"
+        ]
+      }
+    }
+  ],
+  "reasoning": "",
+  "requirements": []
+}
