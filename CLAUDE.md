@@ -32,11 +32,25 @@ pip install -r requirements.txt
 
 ```
 User Input
-    └─> Planner Agent       — decomposes intent into Task list
-            └─> Executor Agent  — maps Tasks to Tool Registry functions
-                    ├─> Privacy Agent   — masks PII before sending to cloud LLM
-                    └─> Validator Agent — verifies output
+    └─> Orchestrator        — classifies: simple (1 agent) or complex (multi-agent)
+        ├─> Simple path     — single Planner Agent handles everything via ReAct loop
+        └─> Multi-agent     — decomposes into sub-tasks, each assigned to a specialized agent
+            ├─> Researcher      — web search, web read, HTTP API
+            ├─> Writer          — file creation, text composition
+            ├─> System Controller — OS control, apps, commands
+            └─> General         — chat, fallback
+    └─> Privacy Guard       — masks PII before sending to cloud LLM
+    └─> Executor            — maps Tasks to Tool Registry functions
 ```
+
+### Multi-Agent Orchestration
+
+- `src/agents/*.json` — agent configs (id, name, description, system_prompt, icon, enabled). Editable via UI.
+- `src/core/agent_registry.py` — loads/saves/lists/deletes agent configs from `src/agents/` directory.
+- `src/core/orchestrator.py` — `Orchestrator.classify(query)` → `OrchestrationPlan(is_multi_agent, assignments)`.
+- `src/core/assistant.py` — `react_step` is orchestration-aware: if multi-agent, runs sub-agents sequentially, passes results between them.
+- API: `GET/POST /agents`, `PATCH/DELETE /agents/{id}` — full CRUD.
+- UI: Agent panel (🤖 button) — list, create, edit, delete, toggle agents.
 
 ### Brain Layer (Week 2 — implemented)
 

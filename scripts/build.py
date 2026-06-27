@@ -18,7 +18,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 SRC = ROOT / "src"
-ENTRY = SRC / "ui" / "app.py"
+ENTRY = SRC / "launcher.py"
 ASSETS = SRC / "ui" / "assets"
 DIST = ROOT / "dist"
 ICON_WIN = ASSETS / "icon.ico"
@@ -45,7 +45,17 @@ def build() -> None:
         "--specpath",
         str(ROOT),
         "--add-data",
-        f"{ASSETS}{_sep()}{_asset_dest()}",
+        f"{ASSETS}{_sep()}ui/assets",
+        "--add-data",
+        f"{SRC / 'tools' / 'whitelist.json'}{_sep()}tools",
+        "--add-data",
+        f"{SRC / 'agents'}{_sep()}agents",
+        "--add-data",
+        f"{SRC / 'recipes'}{_sep()}recipes",
+        "--hidden-import", "uvicorn.logging",
+        "--hidden-import", "uvicorn.loops.auto",
+        "--hidden-import", "uvicorn.protocols.http.auto",
+        "--hidden-import", "uvicorn.lifespan.on",
         "--paths",
         str(SRC),
     ]
@@ -71,9 +81,6 @@ def build() -> None:
 def _sep() -> str:
     return ";" if platform.system() == "Windows" else ":"
 
-
-def _asset_dest() -> str:
-    return "ui/assets"
 
 
 if __name__ == "__main__":

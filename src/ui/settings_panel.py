@@ -8,9 +8,11 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QLineEdit,
+    QPlainTextEdit,
     QPushButton,
     QScrollArea,
     QSpinBox,
+    QTabWidget,
     QVBoxLayout,
     QWidget,
 )
@@ -36,6 +38,15 @@ _CHECK_STYLE = """
         border: 1px solid #3a3a5e; background: #2a2a3e;
     }
     QCheckBox::indicator:checked { background: #06d6a0; border-color: #06d6a0; }
+"""
+_TAB_STYLE = """
+    QTabWidget::pane { border: none; background: transparent; }
+    QTabBar::tab {
+        background: #1a1a2e; color: #888; border: none;
+        padding: 4px 12px; font-size: 8pt;
+    }
+    QTabBar::tab:selected { color: #06d6a0; border-bottom: 2px solid #06d6a0; }
+    QTabBar::tab:hover { color: #e0e0e0; }
 """
 
 _FIELD_DEFS: list[dict] = [
@@ -137,7 +148,7 @@ class SettingsPanel(QWidget):
         self._build_ui()
 
     def _build_ui(self) -> None:
-        self.setStyleSheet(_VALUE_STYLE + _CHECK_STYLE)
+        self.setStyleSheet(_VALUE_STYLE + _CHECK_STYLE + _TAB_STYLE)
 
         outer = QVBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 0)
@@ -172,6 +183,32 @@ class SettingsPanel(QWidget):
         sep.setStyleSheet("background: #3a3a5e;")
         outer.addWidget(sep)
 
+        tabs = QTabWidget()
+        tabs.addTab(self._build_settings_tab(), "General")
+        tabs.addTab(self._build_whitelist_tab(), "Whitelist")
+        outer.addWidget(tabs, stretch=1)
+
+        btn_row = QHBoxLayout()
+        btn_row.setContentsMargins(8, 4, 8, 6)
+        btn_row.addStretch()
+
+        save_btn = QPushButton("Save")
+        save_btn.setFont(QFont(FONT_FAMILY, 8))
+        save_btn.setFixedHeight(24)
+        save_btn.setStyleSheet("""
+            QPushButton {
+                background: #06d6a0; color: #1a1a2e; border: none;
+                border-radius: 6px; padding: 3px 20px;
+            }
+            QPushButton:hover { background: #05c090; }
+        """)
+        save_btn.clicked.connect(self._on_save)
+        btn_row.addWidget(save_btn)
+        btn_row.addStretch()
+
+        outer.addLayout(btn_row)
+
+    def _build_settings_tab(self) -> QWidget:
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setStyleSheet("QScrollArea { background: transparent; border: none; }")
@@ -211,29 +248,66 @@ class SettingsPanel(QWidget):
             form.addLayout(row)
 
         form.addStretch()
-
         scroll.setWidget(content)
-        outer.addWidget(scroll, stretch=1)
+        return scroll
 
-        btn_row = QHBoxLayout()
-        btn_row.setContentsMargins(8, 4, 8, 6)
-        btn_row.addStretch()
+    def _build_whitelist_tab(self) -> QWidget:
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setStyleSheet("QScrollArea { background: transparent; border: none; }")
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
 
-        save_btn = QPushButton("Save")
-        save_btn.setFont(QFont(FONT_FAMILY, 8))
-        save_btn.setFixedHeight(24)
-        save_btn.setStyleSheet("""
-            QPushButton {
-                background: #06d6a0; color: #1a1a2e; border: none;
-                border-radius: 6px; padding: 3px 20px;
-            }
-            QPushButton:hover { background: #05c090; }
-        """)
-        save_btn.clicked.connect(self._on_save)
-        btn_row.addWidget(save_btn)
-        btn_row.addStretch()
+        content = QWidget()
+        content.setStyleSheet("background: transparent;")
+        form = QVBoxLayout(content)
+        form.setContentsMargins(8, 6, 8, 6)
+        form.setSpacing(6)
 
-        outer.addLayout(btn_row)
+        apps_label = QLabel("Allowed Apps")
+        apps_label.setFont(QFont(FONT_FAMILY, 8, QFont.Weight.Bold))
+        apps_label.setStyleSheet("color: #06d6a0; background: transparent;")
+        form.addWidget(apps_label)
+
+        apps_hint = QLabel("One per line")
+        apps_hint.setFont(QFont(FONT_FAMILY, 7))
+        apps_hint.setStyleSheet("color: #666; background: transparent;")
+        form.addWidget(apps_hint)
+
+        self._wl_apps = QPlainTextEdit()
+        self._wl_apps.setFont(QFont(FONT_FAMILY, 8))
+        self._wl_apps.setStyleSheet(
+            "QPlainTextEdit { background: #2a2a3e; color: #e0e0e0;"
+            " border: 1px solid #3a3a5e; border-radius: 4px; padding: 4px; }"
+            "QPlainTextEdit:focus { border-color: #06d6a0; }"
+        )
+        self._wl_apps.setMinimumHeight(90)
+        form.addWidget(self._wl_apps)
+
+        cmds_label = QLabel("Allowed Commands")
+        cmds_label.setFont(QFont(FONT_FAMILY, 8, QFont.Weight.Bold))
+        cmds_label.setStyleSheet(
+            "color: #06d6a0; background: transparent; margin-top: 4px;"
+        )
+        form.addWidget(cmds_label)
+
+        cmds_hint = QLabel("One per line")
+        cmds_hint.setFont(QFont(FONT_FAMILY, 7))
+        cmds_hint.setStyleSheet("color: #666; background: transparent;")
+        form.addWidget(cmds_hint)
+
+        self._wl_commands = QPlainTextEdit()
+        self._wl_commands.setFont(QFont(FONT_FAMILY, 8))
+        self._wl_commands.setStyleSheet(
+            "QPlainTextEdit { background: #2a2a3e; color: #e0e0e0;"
+            " border: 1px solid #3a3a5e; border-radius: 4px; padding: 4px; }"
+            "QPlainTextEdit:focus { border-color: #06d6a0; }"
+        )
+        self._wl_commands.setMinimumHeight(90)
+        form.addWidget(self._wl_commands)
+
+        form.addStretch()
+        scroll.setWidget(content)
+        return scroll
 
     def _create_widget(self, fdef: dict) -> QWidget:
         ftype = fdef["type"]
@@ -283,6 +357,19 @@ class SettingsPanel(QWidget):
                 continue
             val = data[key]
             self._set_widget_value(widget, fdef, val)
+
+        self._load_whitelist()
+
+    def _load_whitelist(self) -> None:
+        try:
+            with httpx.Client(timeout=5.0) as client:
+                resp = client.get(f"{self._base_url}/whitelist")
+                resp.raise_for_status()
+                data = resp.json()
+        except Exception:
+            return
+        self._wl_apps.setPlainText("\n".join(data.get("allowed_apps", [])))
+        self._wl_commands.setPlainText("\n".join(data.get("allowed_commands", [])))
 
     def _set_widget_value(self, widget: QWidget, fdef: dict, val) -> None:
         ftype = fdef["type"]
@@ -341,15 +428,36 @@ class SettingsPanel(QWidget):
         except Exception:
             return
 
+        self._save_whitelist()
         self.settings_changed.emit(data)
         self.closed.emit()
+
+    def _save_whitelist(self) -> None:
+        apps = [
+            line.strip()
+            for line in self._wl_apps.toPlainText().splitlines()
+            if line.strip()
+        ]
+        commands = [
+            line.strip()
+            for line in self._wl_commands.toPlainText().splitlines()
+            if line.strip()
+        ]
+        try:
+            with httpx.Client(timeout=5.0) as client:
+                client.put(
+                    f"{self._base_url}/whitelist",
+                    json={"allowed_apps": apps, "allowed_commands": commands},
+                )
+        except Exception:
+            pass
 
 
 class SettingsWindow(QWidget):
     settings_changed = Signal(dict)
 
-    _WIDTH = 340
-    _HEIGHT = 420
+    _WIDTH = 360
+    _HEIGHT = 480
 
     def __init__(self) -> None:
         super().__init__()
@@ -396,10 +504,30 @@ class SettingsWindow(QWidget):
         self._panel.settings_changed.connect(self.settings_changed.emit)
         inner.addWidget(self._panel)
 
+    _BASE_FONT_SIZE = 9
+
+    def set_font_size(self, size: int) -> None:
+        self._font_size = size
+        self._apply_font_scaling()
+
+    def _apply_font_scaling(self) -> None:
+        delta = getattr(self, "_font_size", self._BASE_FONT_SIZE) - self._BASE_FONT_SIZE
+        for child in self.findChildren(QWidget):
+            if not hasattr(child, "_orig_font_pt"):
+                ps = child.font().pointSize()
+                if ps > 0:
+                    child._orig_font_pt = ps
+            orig = getattr(child, "_orig_font_pt", 0)
+            if orig > 0:
+                f = child.font()
+                f.setPointSize(max(6, orig + delta))
+                child.setFont(f)
+
     def load_and_show(self, parent_pos: QPoint) -> None:
         from PySide6.QtWidgets import QApplication
 
         self._panel.load_settings()
+        self._apply_font_scaling()
         x = parent_pos.x() - self._WIDTH - 8
         y = parent_pos.y()
         screen = QApplication.screenAt(parent_pos)

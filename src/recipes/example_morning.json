@@ -1,23 +1,23 @@
 {
   "title": "Morning Routine",
-  "description": "Opens Discord and Safari to start the day",
+  "description": "Opens apps to start the day",
   "tasks": [
     {
       "action": "open_app",
-      "name": "discord",
+      "name": "Visual Studio Code",
       "params": {}
     },
     {
       "action": "open_app",
-      "name": "safari",
+      "name": "terminal",
       "params": {}
     }
   ],
   "requirements": [
     {
       "type": "app",
-      "name": "discord",
-      "description": "Discord messenger"
+      "name": "Visual Studio Code",
+      "description": "codding IDE"
     },
     {
       "type": "command",
@@ -25,5 +25,5 @@
       "description": "macOS open command"
     }
   ],
-  "reasoning": "Morning routine: open communication and browser"
+  "reasoning": "Morning routine: open editor and terminal"
 }

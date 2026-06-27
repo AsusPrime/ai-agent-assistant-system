@@ -1,7 +1,9 @@
 from __future__ import annotations
 
-from PySide6.QtCore import QPoint, Qt, QTimer
-from PySide6.QtGui import QFont, QMouseEvent
+from pathlib import Path
+
+from PySide6.QtCore import QPoint, QSize, Qt, QTimer
+from PySide6.QtGui import QFont, QIcon, QMouseEvent, QPixmap
 
 from ui.fonts import FONT_FAMILY
 from PySide6.QtWidgets import (
@@ -13,6 +15,8 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
+
+_ASSETS = Path(__file__).resolve().parent / "assets"
 
 from ui.api_client import ApiClient, RecipeRunResult, SingleExecResult, StepResult
 from ui.emotions import Emotion, get_time_of_day, TimeOfDay
@@ -47,6 +51,7 @@ def _display_name(task: dict) -> str:
 
 class FloatingBar(QWidget):
     _WIDTH = 420
+    _MAX_HEIGHT = 620
 
     def __init__(self) -> None:
         super().__init__()
@@ -62,6 +67,7 @@ class FloatingBar(QWidget):
         self._ui_auto_approve = False
         self._ui_max_visible = 5
         self._ui_summary_delay = 1500
+        self._ui_font_size = 9
 
         self._setup_window()
         self._build_ui()
@@ -79,23 +85,35 @@ class FloatingBar(QWidget):
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
         self.setAttribute(Qt.WidgetAttribute.WA_MacAlwaysShowToolWindow, True)
         self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating, True)
+        self.setFixedWidth(self._WIDTH)
+        from PySide6.QtWidgets import QApplication
+        screen = QApplication.primaryScreen()
+        screen_h = screen.availableGeometry().height() if screen else 900
+        self._max_height = int(screen_h * 0.65)
+        self.setMaximumHeight(self._max_height)
 
     def showEvent(self, event) -> None:
         super().showEvent(event)
         self._pin_on_top()
-        self.setFixedWidth(self._WIDTH)
-        QTimer.singleShot(0, self._reposition_settings_btn)
 
-    def _reposition_settings_btn(self) -> None:
-        cw = self._container.width()
-        bw = self._settings_btn.width()
-        self._settings_btn.move(cw - bw - 6, 4)
-        self._settings_btn.raise_()
-        self._recipe_btn.move(cw - bw * 2 - 10, 4)
-        self._recipe_btn.raise_()
+    @staticmethod
+    def _svg_icon(name: str, color: str = "#666") -> QIcon:
+        svg_path = _ASSETS / name
+        if not svg_path.exists():
+            return QIcon()
+        svg_data = svg_path.read_text()
+        svg_data = svg_data.replace('stroke="currentColor"', f'stroke="{color}"')
+        pm = QPixmap(20, 20)
+        pm.fill(Qt.GlobalColor.transparent)
+        from PySide6.QtSvg import QSvgRenderer
+        from PySide6.QtGui import QPainter
+        renderer = QSvgRenderer(svg_data.encode())
+        painter = QPainter(pm)
+        renderer.render(painter)
+        painter.end()
+        return QIcon(pm)
 
     def _build_ui(self) -> None:
-        self.setFixedWidth(self._WIDTH)
         self.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Minimum)
 
         self._container = QWidget(self)
@@ -121,42 +139,47 @@ class FloatingBar(QWidget):
         root_layout.addWidget(self._container)
 
         main_layout = QVBoxLayout(self._container)
-        main_layout.setContentsMargins(10, 8, 10, 8)
-        main_layout.setSpacing(6)
+        main_layout.setContentsMargins(10, 6, 10, 8)
+        main_layout.setSpacing(4)
 
-        self._recipe_btn = QPushButton("📋")
-        self._recipe_btn.setFont(QFont(FONT_FAMILY, 12))
-        self._recipe_btn.setFixedSize(24, 24)
-        self._recipe_btn.setStyleSheet("""
+        _ICON_BTN_STYLE = """
             QPushButton {
-                background: transparent; color: #555; border: none;
+                background: transparent; border: none; padding: 2px;
             }
-            QPushButton:hover { color: #06d6a0; }
-        """)
+            QPushButton:hover { background: rgba(6, 214, 160, 0.15); border-radius: 4px; }
+        """
+
+        toolbar = QHBoxLayout()
+        toolbar.setContentsMargins(0, 0, 0, 0)
+        toolbar.setSpacing(2)
+        toolbar.addStretch()
+
+        self._recipe_btn = QPushButton()
+        self._recipe_btn.setIcon(self._svg_icon("icon_recipes.svg"))
+        self._recipe_btn.setIconSize(QSize(16, 16))
+        self._recipe_btn.setFixedSize(22, 22)
+        self._recipe_btn.setStyleSheet(_ICON_BTN_STYLE)
         self._recipe_btn.setToolTip("Recipes")
-        self._recipe_btn.setParent(self._container)
+        toolbar.addWidget(self._recipe_btn)
 
-        self._settings_btn = QPushButton("⚙")
-        self._settings_btn.setFont(QFont(FONT_FAMILY, 14))
-        self._settings_btn.setFixedSize(24, 24)
-        self._settings_btn.setStyleSheet("""
-            QPushButton {
-                background: transparent; color: #555; border: none;
-            }
-            QPushButton:hover { color: #06d6a0; }
-        """)
+        self._settings_btn = QPushButton()
+        self._settings_btn.setIcon(self._svg_icon("icon_settings.svg"))
+        self._settings_btn.setIconSize(QSize(16, 16))
+        self._settings_btn.setFixedSize(22, 22)
+        self._settings_btn.setStyleSheet(_ICON_BTN_STYLE)
         self._settings_btn.setToolTip("Settings")
-        self._settings_btn.setParent(self._container)
-        self._settings_btn.raise_()
+        toolbar.addWidget(self._settings_btn)
 
-        top_row = QHBoxLayout()
-        top_row.setSpacing(8)
+        main_layout.addLayout(toolbar)
+
+        input_row = QHBoxLayout()
+        input_row.setSpacing(8)
 
         self._tamagotchi = TamagotchiWidget(self._container)
-        top_row.addWidget(self._tamagotchi, alignment=Qt.AlignmentFlag.AlignTop)
+        input_row.addWidget(self._tamagotchi, alignment=Qt.AlignmentFlag.AlignTop)
 
         self._input = InputBar(self._container)
-        top_row.addWidget(
+        input_row.addWidget(
             self._input, stretch=1, alignment=Qt.AlignmentFlag.AlignVCenter
         )
 
@@ -164,9 +187,11 @@ class FloatingBar(QWidget):
         self._connection_dot.setFont(QFont(FONT_FAMILY, 8))
         self._connection_dot.setStyleSheet("color: #888; background: transparent;")
         self._connection_dot.setFixedWidth(14)
-        top_row.addWidget(self._connection_dot, alignment=Qt.AlignmentFlag.AlignVCenter)
+        input_row.addWidget(
+            self._connection_dot, alignment=Qt.AlignmentFlag.AlignVCenter
+        )
 
-        main_layout.addLayout(top_row)
+        main_layout.addLayout(input_row)
 
         self._separator = QWidget(self._container)
         self._separator.setFixedHeight(1)
@@ -180,6 +205,7 @@ class FloatingBar(QWidget):
         main_layout.addWidget(self._status_panel)
 
         self._log_panel = LogPanel(self._container)
+        self._log_panel.size_changed.connect(self._adjust_height)
         self._log_panel.hide()
         main_layout.addWidget(self._log_panel)
 
@@ -298,7 +324,10 @@ class FloatingBar(QWidget):
             self._log_panel.clear()
 
         font_size = data.get("UI_FONT_SIZE", 9)
+        self._ui_font_size = font_size
         self._status_panel.set_font_size(font_size)
+        self._settings_window.set_font_size(font_size)
+        self._recipe_window.set_font_size(font_size)
 
         self._adjust_height()
 
@@ -510,10 +539,11 @@ class FloatingBar(QWidget):
         QTimer.singleShot(0, self._do_resize)
 
     def _do_resize(self) -> None:
-        self._container.adjustSize()
-        h = self._container.sizeHint().height() + 16
-        self.setFixedHeight(max(h, 96))
-        self._reposition_settings_btn()
+        h = self._container.layout().sizeHint().height() + 16
+        new_h = max(min(h, self._max_height), 96)
+        if abs(self.height() - new_h) > 1:
+            self.setMinimumHeight(new_h)
+            self.resize(self._WIDTH, new_h)
 
     def _pin_on_top(self) -> None:
         import platform

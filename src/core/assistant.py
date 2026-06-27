@@ -1,7 +1,19 @@
+import json as _json
+import logging
 import re
+from datetime import datetime
+from pathlib import Path
 from typing import Callable
 
 from config import settings
+
+_llm_logger = logging.getLogger("llm_debug")
+_llm_logger.setLevel(logging.DEBUG)
+_llm_log_path = Path(settings.DATA_DIR).expanduser() / "debug_llm.log"
+_llm_log_path.parent.mkdir(parents=True, exist_ok=True)
+_llm_fh = logging.FileHandler(_llm_log_path, encoding="utf-8")
+_llm_fh.setFormatter(logging.Formatter("%(message)s"))
+_llm_logger.addHandler(_llm_fh)
 from core.enums import ActionTypeEnum
 from core.engine import ExecutionEngine
 from core.memory import MessageRepository
@@ -15,6 +27,8 @@ from integrations.mcp_config import load_config as load_mcp_config
 
 ConfirmFn = Callable[[str], bool]
 MessageFn = Callable[[str], None]
+
+_MAX_DEDUP_RETRIES = 3
 
 
 class QueryResult:
@@ -64,7 +78,15 @@ class AssistantCore:
 
         self.planner_agent = self._build_planner_agent()
 
-        self.session.message_history = self.msg_repo.load_recent(settings.MEMORY_TURNS)
+        from core.planner import build_system_prompt
+        _llm_logger.debug(
+            "\n%s\n%s\n[SYSTEM PROMPT]\n%s\n",
+            "=" * 80,
+            datetime.now().isoformat(),
+            build_system_prompt(),
+        )
+
+        self.session.message_history = []
 
     def _build_planner_agent(self):
         if self.mcp_manager is None or not self.mcp_manager.connected:
@@ -96,9 +118,8 @@ class AssistantCore:
         masked_input, pii_map = self.guard.mask(user_input)
         self.session.pii_map.update(pii_map)
         if pii_map:
-            self._print(
-                f"[Privacy] Masked {len(pii_map)} sensitive pattern(s) before sending to LLM."
-            )
+            details = ", ".join(f"{v} → {k}" for k, v in pii_map.items())
+            self._print(f"[Privacy] Masked: {details}")
             self.session.privacy_events.append(
                 {"input_length": len(user_input), "masked_count": len(pii_map)}
             )
@@ -149,34 +170,60 @@ class AssistantCore:
         if not observations:
             return original_query
 
-        lines = [f'Original request: "{original_query}"', "", "Steps completed so far:"]
+        executed_cmds = [
+            f"{r.task.action.value} {r.task.name}" for r in observations
+        ]
+        lines = [
+            f'Original request: "{original_query}"',
+            "",
+            f"Commands already executed (DO NOT repeat): {executed_cmds}",
+            "",
+            "Step results:",
+        ]
         for i, r in enumerate(observations, 1):
             lines.append(
                 f"  Step {i}: [{r.status}] {r.task.action.value} {r.task.name}"
             )
             if r.stdout.strip():
-                masked, _ = self.guard.mask(r.stdout.strip()[:500])
-                lines.append(f"    stdout: {masked}")
+                stdout_text = r.stdout.strip()[:50000]
+                if r.task.action.value == "read_file":
+                    stdout_text, _ = self.guard.mask(stdout_text)
+                lines.append(f"    stdout: {stdout_text}")
             if r.stderr.strip():
-                masked, _ = self.guard.mask(r.stderr.strip()[:300])
-                lines.append(f"    stderr: {masked}")
+                lines.append(f"    stderr: {r.stderr.strip()[:10000]}")
             if r.skipped:
                 lines.append("    (skipped by user)")
+
         lines.append("")
         lines.append(
-            "Based on these results, return the NEXT single step, or a chat task if the request is fulfilled."
+            "Return the NEXT single step (a different command), or a chat task if done."
         )
         return "\n".join(lines)
 
     # -- planning --------------------------------------------------------
 
+    _MAX_HISTORY_MESSAGES = 50
+
     def _get_plan(self, masked_input: str) -> Plan | None:
+        if len(self.session.message_history) > self._MAX_HISTORY_MESSAGES:
+            self.session.message_history = self.session.message_history[-self._MAX_HISTORY_MESSAGES:]
         prev_len = len(self.session.message_history)
         self._print(f"[LOG] Sending to LLM (history: {prev_len} messages)")
+
+        _llm_logger.debug(
+            "\n%s\n%s\n[USER PROMPT]\n%s\n\n[MESSAGE HISTORY] (%d messages)\n%s\n",
+            "=" * 80,
+            datetime.now().isoformat(),
+            masked_input,
+            prev_len,
+            _format_history(self.session.message_history),
+        )
+
         try:
             result = self._run_planner(masked_input)
         except Exception as e:
             self._print(f"[LLM Error] {e}")
+            _llm_logger.debug("[LLM ERROR] %s\n", e)
             return None
 
         self.session.message_history = result.all_messages()
@@ -184,6 +231,13 @@ class AssistantCore:
         if new_msgs:
             self.msg_repo.save_turn(self.session.session_id, new_msgs)
         plan = result.output
+
+        _llm_logger.debug(
+            "[LLM RESPONSE] %d task(s)\n%s\n",
+            len(plan.tasks),
+            _format_plan(plan),
+        )
+
         self._print(f"[LOG] LLM returned {len(plan.tasks)} task(s)")
         return plan
 
@@ -236,10 +290,12 @@ class AssistantCore:
         observations: list[dict],
     ) -> tuple[Task | None, str | None]:
         self._print(f"[LOG] react_step called, {len(observations)} prior observations")
+
         masked_input, pii_map = self.guard.mask(user_input)
         self.session.pii_map.update(pii_map)
         if pii_map:
-            self._print(f"[Privacy] Masked {len(pii_map)} sensitive pattern(s)")
+            details = ", ".join(f"{v} → {k}" for k, v in pii_map.items())
+            self._print(f"[Privacy] Masked: {details}")
 
         obs_results = [
             TaskResult(
@@ -254,23 +310,38 @@ class AssistantCore:
             for o in observations
         ]
 
-        prompt = self._build_react_prompt(masked_input, obs_results)
-        self._print("[LOG] Calling planner for next step...")
-        plan = self._get_plan(prompt)
-        if plan is None:
-            self._print("[LOG] Planner returned None")
-            return None, None
+        for attempt in range(_MAX_DEDUP_RETRIES):
+            prompt = self._build_react_prompt(masked_input, obs_results)
+            self._print("[LOG] Calling planner for next step...")
 
-        plan = _unmask_plan(plan, self.session.pii_map)
+            plan = self._get_plan(prompt)
 
-        if len(plan.tasks) == 1 and plan.tasks[0].action == ActionTypeEnum.CHAT:
-            reply = _extract_chat_reply(plan)
-            self._print("[LOG] Chat reply received, done")
-            return None, reply
+            if plan is None:
+                self._print("[LOG] Planner returned None")
+                return None, None
 
-        task = plan.tasks[0]
-        self._print(f"[LOG] Next task: {task.action.value} | {task.name}")
-        return task, None
+            plan = _unmask_plan(plan, self.session.pii_map)
+
+            if len(plan.tasks) == 1 and plan.tasks[0].action == ActionTypeEnum.CHAT:
+                reply = _extract_chat_reply(plan)
+                self._print("[LOG] Chat reply received, done")
+                return None, reply
+
+            task = plan.tasks[0]
+            dup = _find_duplicate_observation(task, obs_results)
+            if dup is not None:
+                self._print(
+                    f"[LOG] Duplicate command detected: {task.action.value} | {task.name} "
+                    f"(already in step {dup + 1}), injecting previous result"
+                )
+                obs_results.append(obs_results[dup])
+                continue
+
+            self._print(f"[LOG] Next task: {task.action.value} | {task.name}")
+            return task, None
+
+        self._print("[LOG] Max dedup retries reached, giving up")
+        return None, None
 
     def execute_single(self, task_dict: dict) -> TaskResult:
         task = Task(
@@ -290,8 +361,10 @@ class AssistantCore:
     ) -> str | None:
         lines = [f'User asked: "{user_input}"', "Execution results:"]
         for r in results:
-            masked_out, _ = self.guard.mask(r.stdout.strip()[:100])
-            masked_err, _ = self.guard.mask(r.stderr.strip()[:100])
+            masked_out = r.stdout.strip()[:5000]
+            masked_err = r.stderr.strip()[:2000]
+            if r.task.action.value == "read_file":
+                masked_out, _ = self.guard.mask(masked_out)
             lines.append(
                 f"  [{r.status}] {r.task.name} → "
                 f"stdout: {masked_out!r}, stderr: {masked_err!r}"
@@ -409,3 +482,44 @@ def _is_history_malformed_error(err: Exception) -> bool:
 def _is_event_loop_bound_error(err: Exception) -> bool:
     msg = str(err).lower()
     return "bound to a different event loop" in msg or "different event loop" in msg
+
+
+def _format_history(messages: list) -> str:
+    if not messages:
+        return "  (empty)"
+    lines = []
+    for i, msg in enumerate(messages):
+        try:
+            role = getattr(msg, "role", None) or (msg.get("role") if isinstance(msg, dict) else None) or "?"
+            parts = getattr(msg, "parts", None) or (msg.get("parts") if isinstance(msg, dict) else None)
+            if parts:
+                content = str(parts)[:200]
+            else:
+                content = str(msg)[:200]
+            lines.append(f"  [{i}] {role}: {content}")
+        except Exception:
+            lines.append(f"  [{i}] {str(msg)[:200]}")
+    return "\n".join(lines)
+
+
+def _format_plan(plan: Plan) -> str:
+    lines = []
+    if plan.reasoning:
+        lines.append(f"  reasoning: {plan.reasoning[:300]}")
+    for i, t in enumerate(plan.tasks, 1):
+        lines.append(
+            f"  task {i}: action={t.action.value}, name={t.name!r}, "
+            f"description={t.description!r}, params={t.params}"
+        )
+    return "\n".join(lines)
+
+
+def _find_duplicate_observation(
+    task: Task, observations: list[TaskResult]
+) -> int | None:
+    for i, obs in enumerate(observations):
+        if obs.skipped or obs.status == "FAILED":
+            continue
+        if obs.task.action == task.action and obs.task.name == task.name:
+            return i
+    return None

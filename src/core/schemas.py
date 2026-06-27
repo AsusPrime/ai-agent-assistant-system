@@ -29,7 +29,6 @@ class Task(BaseModel):
         if self.action == ActionTypeEnum.CHAT:
             return self
         if self.action in (
-            ActionTypeEnum.RUN_COMMAND,
             ActionTypeEnum.WRITE_FILE,
             ActionTypeEnum.READ_FILE,
             ActionTypeEnum.SEARCH_KNOWLEDGE,
@@ -44,14 +43,16 @@ class Task(BaseModel):
             ActionTypeEnum.RUN_RECIPE,
             ActionTypeEnum.LIST_RECIPES,
         ):
-            return self  # any command/file allowed; HITL is the safety net
+            return self
         with open(_WHITELIST_PATH) as f:
             wl = json.load(f)
         mapping = {
             ActionTypeEnum.OPEN_APP: wl["allowed_apps"],
+            ActionTypeEnum.RUN_COMMAND: wl["allowed_commands"],
         }
         allowed = mapping[self.action]
-        if self.name not in allowed:
+        name_lower = self.name.lower()
+        if name_lower not in [a.lower() for a in allowed]:
             raise ValueError(f"'{self.name}' не дозволено для {self.action}")
         return self
 

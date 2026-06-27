@@ -1,4 +1,29 @@
 {
-  "allowed_apps":     ["discord", "vscode", "notepad", "safari", "chrome", "telegram", "finder", "terminal"],
-  "allowed_commands": ["ls", "pwd", "dir", "echo", "cd", "cat", "head", "tail", "which", "whoami", "date", "find", "grep", "wc"]
+  "allowed_apps": [
+    "chrome",
+    "discord",
+    "finder",
+    "notepad",
+    "safari",
+    "telegram",
+    "terminal",
+    "visual studio code",
+    "vscode"
+  ],
+  "allowed_commands": [
+    "cat",
+    "cd",
+    "date",
+    "dir",
+    "echo",
+    "find",
+    "grep",
+    "head",
+    "ls",
+    "pwd",
+    "tail",
+    "wc",
+    "which",
+    "whoami"
+  ]
 }

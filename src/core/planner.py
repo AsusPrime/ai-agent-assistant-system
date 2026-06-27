@@ -1,6 +1,7 @@
 import json
 import os
 import platform
+from pathlib import Path
 from typing import Any
 
 from pydantic_ai import Agent
@@ -32,6 +33,16 @@ def _format_available_recipes() -> str:
     return "\n".join(lines)
 
 
+def _load_user_rules() -> str:
+    rules_path = Path(settings.DATA_DIR).expanduser() / "user_rules.md"
+    if rules_path.exists():
+        try:
+            return rules_path.read_text(encoding="utf-8").strip()
+        except Exception:
+            pass
+    return ""
+
+
 def build_system_prompt(mcp_tools_section: str = "") -> str:
     with open(_WHITELIST_PATH) as f:
         wl = json.load(f)
@@ -44,9 +55,9 @@ def build_system_prompt(mcp_tools_section: str = "") -> str:
         "EVERY Task MUST have a 'description' field — a short human-readable summary of what this step does, "
         "in the SAME language the user used. This is shown to the user in the UI. "
         "Examples: 'Searching for the latest video', 'Installing a tool', 'Downloading the file', 'Opening the browser'. "
-        f"Auto-approved apps (no confirmation needed): {auto_apps}. "
-        f"Auto-approved commands (no confirmation needed): {auto_cmds}. "
-        "You MAY use any shell command beyond the auto-approved list — the user will be asked to confirm those. "
+        f"Allowed apps: {auto_apps}. "
+        f"Allowed commands: {auto_cmds}. "
+        "You can ONLY use commands from the allowed list above. Any other command will be rejected by the system. "
         "IMPORTANT: before using a command that might not be installed (e.g. python3, node, git, brew, ffmpeg), "
         "add a verification step first: action='run_command', name='which', params={\"args\": [\"<cmd>\"]}. "
         "Only invoke tools when the user explicitly asks for a concrete action (e.g. 'open X', 'run Y', 'read file Z'). "
@@ -144,20 +155,33 @@ def build_system_prompt(mcp_tools_section: str = "") -> str:
         "After execution, you will receive the result (stdout/stderr/returncode) and must decide the next step.\n"
         "When the user's original request is fully satisfied, return a single Task with action='chat' "
         "containing your final answer/summary. This ends the loop.\n"
-        "If a step fails, analyze the error and either retry with a different approach or return a chat explaining what went wrong.\n"
+        "If a step fails, analyze the error and try a DIFFERENT approach — never repeat the exact same command.\n"
         "Never return multiple tasks at once — always exactly one.\n"
+        "EFFICIENCY: Be direct and concise. Choose the simplest approach. "
+        "Combine work into one command when possible (e.g. 'mkdir -p a b c && mv ...' instead of multiple steps). "
+        "Never re-run a command whose output you already have from a previous step. "
+        "Aim to complete the task in as few steps as possible.\n"
         "\n"
         "PROACTIVE PROBLEM SOLVING:\n"
-        "You MUST find a way to complete the user's request. Never give up or say 'I cannot do this'.\n"
-        "You can run ANY shell command — commands not in the auto-approved list will be shown to the user for confirmation.\n"
-        "If a required tool is not installed:\n"
-        f"  1. Detect the OS (you are on {os_info}) and choose the right package manager automatically\n"
-        "  2. Install the tool (the user will confirm the install command)\n"
-        "  3. Use the tool to complete the task\n"
-        "If one approach fails, try another. Exhaust all options before reporting failure.\n"
-        "You CAN install software, clone repos, download files, use temporary tools.\n"
-        "The user controls what gets executed — you propose, they confirm."
+        "You MUST find a way to complete the user's request using ONLY the allowed commands list.\n"
+        "If a command is not in the allowed list, do NOT attempt to run it — tell the user it is not permitted.\n"
+        "If one approach fails, try another approach using allowed commands. Exhaust all options before reporting failure.\n"
+        "\n"
+        "MEMORY (persistent user rules):\n"
+        f"You have a persistent memory file at: {Path(settings.DATA_DIR).expanduser() / 'user_rules.md'}\n"
+        "This file is injected into your system prompt on every session start.\n"
+        "When the user asks you to REMEMBER something (a preference, a rule, a habit, a name, etc.):\n"
+        "  1. Use action='write_file' with params={'path': '"
+        + str(Path(settings.DATA_DIR).expanduser() / "user_rules.md")
+        + "', 'content': '<the rule>', 'append': 'true'} to save it.\n"
+        "  2. Confirm to the user what you saved.\n"
+        "When the user asks what you remember or what rules you have — read this file with action='read_file'.\n"
+        "When the user asks to FORGET something — read the file, then overwrite it (without append) excluding the removed rule.\n"
+        "Keep entries short, one rule per line, prefixed with '- '.\n"
     )
+    user_rules = _load_user_rules()
+    if user_rules:
+        base = base + "\nUSER RULES (always follow these):\n" + user_rules
     if mcp_tools_section:
         base = base + "\n\n" + mcp_tools_section
     return base

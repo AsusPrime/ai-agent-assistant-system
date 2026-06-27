@@ -54,6 +54,7 @@ class _RecipeCard(QWidget):
         title_label = QLabel(title)
         title_label.setFont(QFont(FONT_FAMILY, 9, QFont.Weight.Bold))
         title_label.setStyleSheet("color: #e0e0e0; background: transparent;")
+        title_label.setWordWrap(True)
         text_col.addWidget(title_label)
 
         if description:
@@ -180,8 +181,8 @@ class RecipeListPanel(QWidget):
 class RecipeWindow(QWidget):
     recipe_run = Signal(str)
 
-    _WIDTH = 280
-    _HEIGHT = 320
+    _WIDTH = 360
+    _HEIGHT = 380
 
     def __init__(self) -> None:
         super().__init__()
@@ -226,10 +227,31 @@ class RecipeWindow(QWidget):
         self._panel.recipe_run.connect(self.recipe_run.emit)
         inner.addWidget(self._panel)
 
+    _BASE_FONT_SIZE = 9
+
+    def set_font_size(self, size: int) -> None:
+        self._font_size = size
+        self._apply_font_scaling()
+
+    def _apply_font_scaling(self) -> None:
+        delta = getattr(self, "_font_size", self._BASE_FONT_SIZE) - self._BASE_FONT_SIZE
+        from PySide6.QtWidgets import QWidget
+        for child in self.findChildren(QWidget):
+            if not hasattr(child, "_orig_font_pt"):
+                ps = child.font().pointSize()
+                if ps > 0:
+                    child._orig_font_pt = ps
+            orig = getattr(child, "_orig_font_pt", 0)
+            if orig > 0:
+                f = child.font()
+                f.setPointSize(max(6, orig + delta))
+                child.setFont(f)
+
     def load_and_show(self, parent_pos: QPoint) -> None:
         from PySide6.QtWidgets import QApplication
 
         self._panel.load_recipes()
+        self._apply_font_scaling()
         x = parent_pos.x() - self._WIDTH - 8
         y = parent_pos.y()
         screen = QApplication.screenAt(parent_pos)
@@ -238,7 +260,7 @@ class RecipeWindow(QWidget):
         if screen:
             geo = screen.availableGeometry()
             if x < geo.x():
-                x = parent_pos.x() + 420 + 8
+                x = parent_pos.x() + self._WIDTH + 8
             if y + self._HEIGHT > geo.bottom():
                 y = geo.bottom() - self._HEIGHT
             x = max(x, geo.x())

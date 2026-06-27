@@ -169,6 +169,16 @@ class SettingsResponse(BaseModel):
     UI_LANGUAGE: str
 
 
+class WhitelistResponse(BaseModel):
+    allowed_apps: list[str] = []
+    allowed_commands: list[str] = []
+
+
+class WhitelistUpdateRequest(BaseModel):
+    allowed_apps: list[str] | None = None
+    allowed_commands: list[str] | None = None
+
+
 class SettingsUpdateRequest(BaseModel):
     LLM_PROVIDER: str | None = None
     MODEL_NAME: str | None = None

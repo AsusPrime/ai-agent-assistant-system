@@ -1,6 +1,6 @@
 {
   "title": "Надіслати привітання від ШІ через Gmail",
-  "description": "Відправляє електронний лист з повідомленням 'Привіт від ШІ!' на asusprime003@gmail.com через Gmail. **Важливо:** Перед виконанням, вам потрібно буде вручну замінити `YOUR_APP_PASSWORD_HERE` у файлі `~/send_gmail.py` на ваш *пароль програми* Gmail. Докладніше про паролі програм: https://support.google.com/accounts/answer/185833?hl=uk",
+  "description": "Відправляє електронний лист з повідомленням 'Привіт від ШІ!'",
   "tasks": [
     {
       "action": "write_file",

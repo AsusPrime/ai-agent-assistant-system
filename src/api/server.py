@@ -26,6 +26,8 @@ from api.schemas import (
     StepRequest,
     StepResponse,
     TaskExecution,
+    WhitelistResponse,
+    WhitelistUpdateRequest,
 )
 from config import settings
 from core.assistant import AssistantCore
@@ -327,6 +329,42 @@ async def run_recipe(
         for r in results
     ]
     return ExecuteResponse(tasks=tasks, messages=list(buf))
+
+
+_WHITELIST_PATH = Path(__file__).resolve().parent.parent / "tools" / "whitelist.json"
+
+
+def _load_whitelist() -> dict:
+    import json
+
+    if _WHITELIST_PATH.exists():
+        return json.loads(_WHITELIST_PATH.read_text(encoding="utf-8"))
+    return {"allowed_apps": [], "allowed_commands": []}
+
+
+def _save_whitelist(data: dict) -> None:
+    import json
+
+    _WHITELIST_PATH.write_text(
+        json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
+    )
+
+
+@app.get("/whitelist", response_model=WhitelistResponse)
+async def get_whitelist() -> WhitelistResponse:
+    data = _load_whitelist()
+    return WhitelistResponse(**data)
+
+
+@app.put("/whitelist", response_model=WhitelistResponse)
+async def update_whitelist(req: WhitelistUpdateRequest) -> WhitelistResponse:
+    data = _load_whitelist()
+    if req.allowed_apps is not None:
+        data["allowed_apps"] = sorted(set(v.strip().lower() for v in req.allowed_apps if v.strip()))
+    if req.allowed_commands is not None:
+        data["allowed_commands"] = sorted(set(v.strip() for v in req.allowed_commands if v.strip()))
+    _save_whitelist(data)
+    return WhitelistResponse(**data)
 
 
 _SETTINGS_FIELDS = [

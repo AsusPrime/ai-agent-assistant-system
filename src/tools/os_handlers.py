@@ -1,3 +1,4 @@
+import shlex
 import subprocess
 
 from core.base_os import BaseOSHandler
@@ -20,7 +21,7 @@ class PosixHandler(BaseOSHandler):
         import platform
 
         cmd = "open -a" if platform.system() == "Darwin" else ""
-        subprocess.Popen(f"{cmd} {app_name}", shell=True)
+        subprocess.Popen(f"{cmd} {shlex.quote(app_name)}", shell=True)
         return f"Unix-like: спроба запуску {app_name}"
 
     def run_shell(self, command: str, cwd: str | None = None) -> tuple[str, str, int]:

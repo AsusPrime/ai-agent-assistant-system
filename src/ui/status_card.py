@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from PySide6.QtCore import Qt, QPropertyAnimation, QEasingCurve, Property, Signal, QUrl
-from PySide6.QtGui import QColor, QFont, QImage, QPainter, QTextDocument
+from PySide6.QtGui import QColor, QFont, QImage, QPainter, QTextDocument, QTextOption
 from PySide6.QtNetwork import QNetworkAccessManager, QNetworkRequest, QNetworkReply
 from PySide6.QtWidgets import (
     QWidget,
@@ -375,23 +375,45 @@ class StatusPanel(QWidget):
             self._update_reply_height()
 
     def _update_reply_height(self) -> None:
-        doc_height = int(self._reply_browser.document().size().height()) + 8
-        self._reply_browser.setFixedHeight(doc_height)
+        from PySide6.QtWidgets import QApplication
+
+        screen = QApplication.primaryScreen()
+        screen_h = screen.availableGeometry().height() if screen else 900
+        max_h = int(screen_h * 0.55)
+
+        doc = self._reply_browser.document()
+        available_w = self._reply_browser.viewport().width()
+        if available_w > 20:
+            doc.setTextWidth(available_w)
+
+        doc_height = int(doc.size().height()) + 12
+        clamped = min(doc_height, max_h)
+        self._reply_browser.setFixedHeight(clamped)
+        self._reply_browser.setVerticalScrollBarPolicy(
+            Qt.ScrollBarPolicy.ScrollBarAsNeeded
+            if doc_height > max_h
+            else Qt.ScrollBarPolicy.ScrollBarAlwaysOff
+        )
 
     def set_reply(self, text: str) -> None:
         if text:
+            from PySide6.QtCore import QTimer
+
             self._last_reply_md = text
             self._reply_browser.setFont(QFont(FONT_FAMILY, self._font_size))
             html = _md_to_html(text, self._font_size)
             self._reply_browser.setHtml(html)
-            self._update_reply_height()
             self._reply_browser.show()
+            self._update_reply_height()
+            QTimer.singleShot(0, self._update_reply_height)
         else:
             self._last_reply_md = ""
             self._reply_browser.hide()
 
 
 class LogPanel(QWidget):
+    size_changed = Signal()
+
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self._layout = QVBoxLayout(self)
@@ -414,10 +436,11 @@ class LogPanel(QWidget):
         self._browser = QTextBrowser(self)
         self._browser.setFont(QFont(FONT_FAMILY, 7))
         self._browser.setOpenExternalLinks(False)
+        self._browser.setWordWrapMode(QTextOption.WrapMode.WrapAtWordBoundaryOrAnywhere)
         self._browser.setStyleSheet("""
             QTextBrowser {
                 color: #808090; background: #1a1a28; border: none;
-                padding: 2px 4px;
+                border-radius: 4px; padding: 4px 6px;
             }
             QScrollBar:vertical {
                 width: 4px; background: transparent;
@@ -437,22 +460,42 @@ class LogPanel(QWidget):
         self._lines: list[str] = []
 
     def _toggle(self) -> None:
+        from PySide6.QtCore import QTimer
+
         self._expanded = not self._expanded
         if self._expanded:
             self._header.setText("▼ Logs")
             self._browser.show()
             self._update_height()
+            QTimer.singleShot(0, self._deferred_resize)
         else:
             self._header.setText("▶ Logs")
             self._browser.setFixedHeight(0)
             self._browser.hide()
+            self.size_changed.emit()
+
+    _LOG_MAX_HEIGHT = 200
+
+    def _deferred_resize(self) -> None:
+        self._update_height()
+        self.size_changed.emit()
 
     def _update_height(self) -> None:
-        n = len(self._lines)
-        h = min(max(n * 14, 40), 120)
+        doc = self._browser.document()
+        vp_w = self._browser.viewport().width()
+        if vp_w > 20:
+            doc.setTextWidth(vp_w)
+
+        doc_h = int(doc.size().height()) + 12
+        h = min(max(doc_h, 40), self._LOG_MAX_HEIGHT)
         self._browser.setFixedHeight(h)
+        self._browser.setVerticalScrollBarPolicy(
+            Qt.ScrollBarPolicy.ScrollBarAsNeeded
+        )
 
     def append_messages(self, messages: list[str]) -> None:
+        from PySide6.QtCore import QTimer
+
         for msg in messages:
             self._lines.append(msg)
         if self._lines:
@@ -461,6 +504,7 @@ class LogPanel(QWidget):
         self._browser.setPlainText("\n".join(self._lines))
         if self._expanded:
             self._update_height()
+            QTimer.singleShot(0, self._deferred_resize)
         sb = self._browser.verticalScrollBar()
         sb.setValue(sb.maximum())
 

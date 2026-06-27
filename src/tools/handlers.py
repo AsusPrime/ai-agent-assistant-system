@@ -1,5 +1,6 @@
 import json
 import os
+import shlex
 
 from core.schemas import Task, TaskResult
 from core.session import SessionState
@@ -46,7 +47,8 @@ def run_command(task: Task, session: SessionState) -> TaskResult:
                 task=task, stderr=f"cd: {new_cwd}: No such directory", returncode=1
             )
 
-    cmd = f"{name} {' '.join(args)}" if args else name
+    safe_args = [os.path.expanduser(a) if a.startswith("~") else a for a in args]
+    cmd = f"{name} {' '.join(shlex.quote(a) for a in safe_args)}" if safe_args else name
     stdout, stderr, returncode = get_os_handler().run_shell(cmd, cwd=session.cwd)
     return TaskResult(task=task, stdout=stdout, stderr=stderr, returncode=returncode)
 
