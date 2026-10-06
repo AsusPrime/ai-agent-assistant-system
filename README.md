@@ -1,4 +1,4 @@
-# AI Agent Assistant System (Akashi)
+# AI Agent Assistant System
 
 Multi-agent desktop assistant that controls a PC and cloud services through natural language.
 Built as a bachelor's thesis project (Computer Engineering, Chernivtsi National University, 2026).
